@@ -26,7 +26,7 @@ export default function Layout({ children }) {
             </svg>
             Create Challenge
           </NavLink>
-          <NavLink to="/?view=queue" className={() => ''}>
+          <NavLink to="/queue" className={({ isActive }) => isActive ? 'active' : ''}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <line x1="2" y1="4" x2="14" y2="4" />
               <line x1="2" y1="8" x2="14" y2="8" />
@@ -34,7 +34,7 @@ export default function Layout({ children }) {
             </svg>
             Queue
           </NavLink>
-          <NavLink to="/?view=packages" className={() => ''}>
+          <NavLink to="/packages" className={({ isActive }) => isActive ? 'active' : ''}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="2" y="4" width="12" height="10" rx="1" />
               <path d="M5 4V2h6v2" />
@@ -44,7 +44,7 @@ export default function Layout({ children }) {
           </NavLink>
         </nav>
         <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', fontSize: '11px', color: 'var(--text-muted)' }}>
-          v2.0.0 - Phase 2
+          v2.1.0 - Phase 2
         </div>
       </aside>
       <main className="main-content">
