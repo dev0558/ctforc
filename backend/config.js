@@ -21,5 +21,7 @@ export default {
   queue: {
     researcherConcurrency: parseInt(process.env.RESEARCHER_CONCURRENCY || '2', 10),
     researcherMaxRetries: parseInt(process.env.RESEARCHER_MAX_RETRIES || '3', 10),
+    builderConcurrency: parseInt(process.env.BUILDER_CONCURRENCY || '2', 10),
+    builderMaxRetries: parseInt(process.env.BUILDER_MAX_RETRIES || '2', 10),
   },
 };

@@ -3,21 +3,108 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { get, post } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
 
+/**
+ * Group flat file paths into a tree structure for the sidebar.
+ * Input: ["source/app.py", "source/Dockerfile", "writeup/WRITEUP.md"]
+ * Output: { source: { "app.py": null, "Dockerfile": null }, writeup: { "WRITEUP.md": null } }
+ */
+function buildFileTree(filePaths) {
+  const tree = {};
+  for (const fp of filePaths) {
+    const parts = fp.split('/');
+    let node = tree;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (i === parts.length - 1) {
+        node[part] = null; // leaf file
+      } else {
+        if (!node[part]) node[part] = {};
+        node = node[part];
+      }
+    }
+  }
+  return tree;
+}
+
+function FileTreeNode({ name, node, depth, prefix, selectedPath, onSelect }) {
+  const fullPath = prefix ? `${prefix}/${name}` : name;
+  const isFile = node === null;
+  const isSelected = fullPath === selectedPath;
+
+  if (isFile) {
+    return (
+      <button
+        onClick={() => onSelect(fullPath)}
+        style={{
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          padding: '4px 8px 4px ' + (12 + depth * 14) + 'px',
+          background: isSelected ? 'rgba(100, 255, 218, 0.1)' : 'transparent',
+          borderLeft: isSelected ? '2px solid var(--accent-teal)' : '2px solid transparent',
+          border: 'none',
+          borderLeft: isSelected ? '2px solid var(--accent-teal)' : '2px solid transparent',
+          color: isSelected ? 'var(--accent-teal)' : 'var(--text-secondary)',
+          fontSize: '12px',
+          fontFamily: 'var(--font-mono)',
+          cursor: 'pointer',
+        }}
+      >
+        {name}
+      </button>
+    );
+  }
+
+  // Directory
+  return (
+    <div>
+      <div style={{ padding: '4px 8px 4px ' + (12 + depth * 14) + 'px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+        {name}/
+      </div>
+      {Object.entries(node)
+        .sort(([, a], [, b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0))
+        .map(([childName, childNode]) => (
+          <FileTreeNode
+            key={childName}
+            name={childName}
+            node={childNode}
+            depth={depth + 1}
+            prefix={fullPath}
+            selectedPath={selectedPath}
+            onSelect={onSelect}
+          />
+        ))}
+    </div>
+  );
+}
+
 export default function BuildReview() {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [diskFiles, setDiskFiles] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedFile, setSelectedFile] = useState(0);
+  const [selectedPath, setSelectedPath] = useState('');
   const [rejectNotes, setRejectNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
+        // Load challenge data from DB
         const res = await get(`/challenges/${jobId}`);
         setData(res);
+
+        // Also try to load files from disk (Phase 3 storage)
+        try {
+          const fileRes = await get(`/challenge-files/${jobId}`);
+          if (fileRes.totalFiles > 0) {
+            setDiskFiles(fileRes.files);
+          }
+        } catch {
+          // Disk files may not exist for older/mock challenges — that's fine
+        }
       } catch (err) {
         setError(err.message);
       } finally {
@@ -48,77 +135,125 @@ export default function BuildReview() {
   if (!data) return <div className="text-muted">Not found</div>;
 
   const { job, spec, challenge } = data;
-  const files = challenge?.file_manifest || [];
   const canReview = job.status === 'pending_build_review';
+
+  // Merge file sources: prefer disk files (Phase 3), fall back to DB manifest
+  let files = {};
+  let filePaths = [];
+
+  if (diskFiles && Object.keys(diskFiles).length > 0) {
+    // Phase 3: files from disk with full content
+    files = diskFiles;
+    filePaths = Object.keys(diskFiles).sort();
+  } else if (challenge?.file_manifest && Array.isArray(challenge.file_manifest)) {
+    // Phase 1/2: files from DB manifest
+    for (const f of challenge.file_manifest) {
+      files[f.path] = { content: f.content, language: f.language, size: f.content?.length || 0 };
+    }
+    filePaths = challenge.file_manifest.map((f) => f.path);
+  }
+
+  // Set initial selection
+  if (!selectedPath && filePaths.length > 0) {
+    // Pick the first "interesting" file (writeup, app source, etc.)
+    const preferred = filePaths.find((f) => f.includes('WRITEUP') || f.includes('writeup.md'))
+      || filePaths.find((f) => f.includes('app.py') || f.includes('app.js'))
+      || filePaths[0];
+    setSelectedPath(preferred);
+  }
+
+  const selectedFile = files[selectedPath];
+  const fileTree = buildFileTree(filePaths);
+  const specJson = spec?.spec_json || {};
+  const challengeName = specJson.challengeName || specJson.challenge_name || 'Challenge';
 
   return (
     <div>
       <div className="page-header">
         <h2>Build Review</h2>
         <div className="breadcrumb">
-          Job {job.id.substring(0, 8)} / {job.cve_id || 'Custom Idea'} / <StatusBadge status={job.status} />
+          Job {job.id.substring(0, 8)} / {job.cve_id || challengeName} / <StatusBadge status={job.status} />
         </div>
       </div>
 
-      {spec?.spec_json && (
-        <div className="card mb-24" style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-          <div>
-            <div className="field-label">Challenge</div>
-            <div style={{ fontWeight: 600 }}>{spec.spec_json.challenge_name}</div>
-          </div>
-          <div>
-            <div className="field-label">Category</div>
-            <div className="mono" style={{ textTransform: 'capitalize' }}>{spec.spec_json.category}</div>
-          </div>
-          <div>
-            <div className="field-label">Difficulty</div>
-            <div className="mono" style={{ textTransform: 'capitalize' }}>{spec.spec_json.difficulty}</div>
-          </div>
-          <div>
-            <div className="field-label">Points</div>
-            <div className="mono">{spec.spec_json.points}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="review-panel">
+      {/* Challenge summary */}
+      <div className="card mb-24" style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
         <div>
-          {/* File tabs */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', overflowX: 'auto' }}>
-              {files.map((file, i) => (
-                <button
-                  key={i}
-                  className={`tab ${selectedFile === i ? 'active' : ''}`}
-                  onClick={() => setSelectedFile(i)}
-                  style={{ whiteSpace: 'nowrap' }}
-                >
-                  {file.path}
-                </button>
-              ))}
-            </div>
-            <div style={{ padding: '16px' }}>
-              {files[selectedFile] ? (
-                <div className="code-block">
-                  <span className="filename">{files[selectedFile].path} ({files[selectedFile].language})</span>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    {files[selectedFile].content}
-                  </pre>
-                </div>
-              ) : (
-                <div className="text-muted">No files in manifest</div>
-              )}
-            </div>
-          </div>
+          <div className="field-label">Challenge</div>
+          <div style={{ fontWeight: 600 }}>{challengeName}</div>
+        </div>
+        <div>
+          <div className="field-label">Category</div>
+          <div className="mono" style={{ textTransform: 'capitalize' }}>{specJson.category || job.category || '-'}</div>
+        </div>
+        <div>
+          <div className="field-label">Difficulty</div>
+          <div className="mono" style={{ textTransform: 'capitalize' }}>{specJson.difficulty || '-'}</div>
+        </div>
+        <div>
+          <div className="field-label">Points</div>
+          <div className="mono">{specJson.points || '-'}</div>
+        </div>
+        <div>
+          <div className="field-label">Files</div>
+          <div className="mono">{filePaths.length}</div>
+        </div>
+        <div>
+          <div className="field-label">Tokens</div>
+          <div className="mono">{challenge?.token_usage || 0}</div>
+        </div>
+        <div>
+          <div className="field-label">Build Time</div>
+          <div className="mono">{challenge?.generation_time_ms ? `${(challenge.generation_time_ms / 1000).toFixed(1)}s` : '-'}</div>
+        </div>
+      </div>
 
-          {challenge?.token_usage != null && (
-            <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
-              <span className="mono">Tokens: {challenge.token_usage}</span>
-              <span className="mono">Generation: {challenge.generation_time_ms}ms</span>
-            </div>
-          )}
+      {/* File viewer with tree sidebar */}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 280px', gap: '16px', alignItems: 'start' }}>
+        {/* File tree sidebar */}
+        <div className="card" style={{ padding: '8px 0', maxHeight: '70vh', overflowY: 'auto' }}>
+          <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid var(--border-color)', marginBottom: '4px' }}>
+            Files ({filePaths.length})
+          </div>
+          {Object.entries(fileTree)
+            .sort(([, a], [, b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0))
+            .map(([name, node]) => (
+              <FileTreeNode
+                key={name}
+                name={name}
+                node={node}
+                depth={0}
+                prefix=""
+                selectedPath={selectedPath}
+                onSelect={setSelectedPath}
+              />
+            ))}
         </div>
 
+        {/* File content viewer */}
+        <div className="card" style={{ padding: 0, overflow: 'hidden', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: '13px', color: 'var(--accent-teal)' }}>{selectedPath || 'No file selected'}</span>
+            {selectedFile && (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                {selectedFile.language} | {selectedFile.size ? `${(selectedFile.size / 1024).toFixed(1)}KB` : ''}
+              </span>
+            )}
+          </div>
+          <div style={{ padding: '16px', overflow: 'auto', flex: 1 }}>
+            {selectedFile ? (
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '12px', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
+                {selectedFile.content}
+              </pre>
+            ) : (
+              <div className="text-muted" style={{ textAlign: 'center', padding: '40px' }}>
+                {filePaths.length > 0 ? 'Select a file from the tree' : 'No files generated'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Review actions */}
         <div>
           <div className="card">
             <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px' }}>
@@ -136,7 +271,7 @@ export default function BuildReview() {
                   Approve Build
                 </button>
 
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px' }}>
                   <textarea
                     value={rejectNotes}
                     onChange={(e) => setRejectNotes(e.target.value)}
@@ -160,6 +295,25 @@ export default function BuildReview() {
               </div>
             )}
           </div>
+
+          {/* Flag info */}
+          {specJson.flag && (
+            <div className="card" style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                Flags
+              </div>
+              <div style={{ marginBottom: '8px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Real Flag</div>
+                <div className="mono" style={{ fontSize: '12px', color: 'var(--accent-teal)', wordBreak: 'break-all' }}>{specJson.flag}</div>
+              </div>
+              {specJson.honeypotFlag && (
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Honeypot (Decoy)</div>
+                  <div className="mono" style={{ fontSize: '12px', color: 'var(--accent-coral)', wordBreak: 'break-all' }}>{specJson.honeypotFlag}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
