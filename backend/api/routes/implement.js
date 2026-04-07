@@ -9,7 +9,7 @@ const cveItemSchema = z.string().regex(/^CVE-\d{4}-\d{4,}$/, 'Invalid CVE ID for
 
 const ideaItemSchema = z.object({
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  category: z.enum(['web', 'forensics', 'cryptography', 'osint', 'network', 'pwn']),
+  category: z.enum(['web', 'forensics', 'crypto', 'osint', 'network', 'pwn']),
   difficulty: z.enum(['easy', 'medium', 'hard', 'expert']),
 });
 

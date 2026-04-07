@@ -1,5 +1,5 @@
 export default {
-  id: 'cryptography',
+  id: 'crypto',
   name: 'Cryptography',
   description: 'Classical ciphers, modern crypto attacks, RSA, AES, hash cracking, key exchange flaws, and custom cryptographic implementations.',
   icon: 'lock',
@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'RSA with small primes, AES-ECB, hash collisions' },
     { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Elliptic curve attacks, padding oracle, custom crypto' },
   ],
+  artifactTypes: ['Encryption script', 'Ciphertext/encrypted file', 'Solver script', 'Math writeup'],
   outputFiles: ['encrypt.py', 'ciphertext.txt', 'public_key.pem', 'solve.py', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: false,
   formFields: [
     { name: 'cryptoType', label: 'Crypto Type', type: 'select', options: ['RSA', 'AES', 'XOR', 'Classical Cipher', 'Hash', 'Elliptic Curve', 'Diffie-Hellman', 'Custom Algorithm', 'Other'] },
     { name: 'attackType', label: 'Attack Vector', type: 'select', options: ['Factoring', 'Padding Oracle', 'Brute Force', 'Known Plaintext', 'Frequency Analysis', 'Side Channel', 'Implementation Flaw', 'Custom'] },
@@ -22,4 +25,5 @@ export default {
     'Custom substitution cipher with frequency analysis and a twist',
   ],
   promptHints: 'Provide the encryption script so players can analyze the algorithm. Use mathematically interesting attacks, not just brute force. Include solver script in writeup.',
+  builder: true,
 };

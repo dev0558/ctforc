@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Chained exploits, WAF bypass, SSTI' },
     { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Complex deserialization, multi-step RCE' },
   ],
+  artifactTypes: ['Dockerfile', 'docker-compose.yml', 'Application source', 'Exploit script', 'Writeup'],
   outputFiles: ['Dockerfile', 'docker-compose.yml', 'app.py', 'requirements.txt', 'exploit.py', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: true,
   formFields: [
     { name: 'vulnType', label: 'Vulnerability Type', type: 'select', options: ['SQL Injection', 'XSS', 'SSTI', 'SSRF', 'File Upload', 'Auth Bypass', 'Deserialization', 'Path Traversal', 'Command Injection', 'IDOR', 'XXE', 'Prototype Pollution', 'Other'] },
     { name: 'framework', label: 'Target Framework', type: 'select', options: ['Flask', 'Express.js', 'Django', 'Spring', 'Laravel', 'WordPress', 'Custom'] },
@@ -23,4 +26,5 @@ export default {
     'Insecure deserialization in a Java Spring session cookie',
   ],
   promptHints: 'Focus on realistic web application scenarios. Include Dockerfile for isolated deployment. Vulnerable endpoints should be discoverable through enumeration.',
+  builder: true,
 };

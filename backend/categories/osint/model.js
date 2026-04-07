@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Cross-platform correlation, hidden metadata' },
     { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Multi-step investigation, geolocation chains' },
   ],
+  artifactTypes: ['Profile setup script', 'OSINT artifacts', 'Image set', 'Writeup'],
   outputFiles: ['setup_profiles.py', 'generate_artifacts.py', 'images/', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: false,
   formFields: [
     { name: 'osintType', label: 'Investigation Type', type: 'select', options: ['Social Media', 'Geolocation', 'Image Analysis', 'Domain/DNS', 'Email Tracing', 'Username Search', 'Document Metadata', 'Other'] },
     { name: 'platforms', label: 'Platforms Involved', type: 'select', options: ['Fake Website', 'Social Profile', 'Image Set', 'Domain Records', 'Email Headers', 'Multiple Sources'] },
@@ -22,4 +25,5 @@ export default {
     'Investigate a suspicious domain registration chain to uncover a phishing infrastructure',
   ],
   promptHints: 'Create realistic fake profiles and digital breadcrumbs. Use real-looking but entirely fictional data. EXIF metadata should contain genuine GPS coordinates to fictional locations.',
+  builder: true,
 };

@@ -1,9 +1,10 @@
 /**
  * Category registry — imports all category models and provides lookup.
+ * Adding a new category: create the folder, write model.js + builder.js + prompt.md + schema.js, register here.
  */
 import webModel from './web/model.js';
 import forensicsModel from './forensics/model.js';
-import cryptographyModel from './cryptography/model.js';
+import cryptoModel from './crypto/model.js';
 import osintModel from './osint/model.js';
 import networkModel from './network/model.js';
 import pwnModel from './pwn/model.js';
@@ -11,14 +12,14 @@ import pwnModel from './pwn/model.js';
 const categories = {
   web: webModel,
   forensics: forensicsModel,
-  cryptography: cryptographyModel,
+  crypto: cryptoModel,
   osint: osintModel,
   network: networkModel,
   pwn: pwnModel,
 };
 
-export function getCategory(name) {
-  return categories[name] || null;
+export function getCategory(id) {
+  return categories[id] || null;
 }
 
 export function getAllCategories() {
@@ -34,6 +35,7 @@ export function getCategorySummaries() {
     color: c.color,
     defaultTechStack: c.defaultTechStack,
     difficulties: c.difficulties,
+    formFields: c.formFields,
     exampleIdeas: c.exampleIdeas,
   }));
 }

@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 60, description: 'Stack canary bypass, ROP, format string' },
     { level: 'hard', points: [500], estimatedMinutes: 120, description: 'Heap exploitation, ASLR+PIE bypass, kernel pwn' },
   ],
+  artifactTypes: ['Vulnerable binary source', 'Makefile', 'Dockerfile', 'Exploit script', 'Writeup'],
   outputFiles: ['vuln.c', 'Makefile', 'Dockerfile', 'exploit.py', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: true,
   formFields: [
     { name: 'vulnType', label: 'Vulnerability Type', type: 'select', options: ['Buffer Overflow', 'Format String', 'Heap Overflow', 'Use-After-Free', 'Integer Overflow', 'Race Condition', 'ROP', 'Shellcoding', 'Other'] },
     { name: 'protections', label: 'Binary Protections', type: 'select', options: ['None', 'NX Only', 'NX + Canary', 'NX + Canary + ASLR', 'Full (NX+Canary+ASLR+PIE)', 'Custom'] },
@@ -22,4 +25,5 @@ export default {
     'Heap use-after-free in a custom memory allocator leading to arbitrary write',
   ],
   promptHints: 'Provide C source code and a Makefile with specific compiler flags for protections. Include a Docker setup for consistent exploitation environment. Binary should be compiled for the target architecture.',
+  builder: true,
 };

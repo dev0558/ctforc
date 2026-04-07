@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get } from '../api/client';
 import StatsCards from '../components/StatsCards';
-import SubmitForm from '../components/SubmitForm';
 import JobTable from '../components/JobTable';
 
 export default function Dashboard() {
@@ -43,7 +42,6 @@ export default function Dashboard() {
       )}
 
       <StatsCards stats={stats} />
-      <SubmitForm onSubmitted={fetchData} />
       <JobTable jobs={jobs} />
     </div>
   );

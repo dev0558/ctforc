@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Multi-file correlation, steganography' },
     { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Memory dumps, custom protocols, multi-layer encoding' },
   ],
+  artifactTypes: ['Artifact generator', 'Evidence files', 'Analysis hints', 'Writeup'],
   outputFiles: ['generate_artifacts.py', 'analysis_hints.txt', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: false,
   formFields: [
     { name: 'artifactType', label: 'Primary Artifact', type: 'select', options: ['PCAP', 'Memory Dump', 'Disk Image', 'Log Files', 'Image (Stego)', 'PDF', 'Network Logs', 'Other'] },
     { name: 'hidingMethod', label: 'Data Hiding Method', type: 'select', options: ['Steganography', 'Encoding Chain', 'Protocol Abuse', 'File Carving', 'Metadata', 'Encrypted Archive', 'Custom'] },
@@ -22,4 +25,5 @@ export default {
     'Steganographic data hidden in multiple PNG images requiring LSB extraction',
   ],
   promptHints: 'Create realistic forensic artifacts. PCAPs should contain real-looking traffic with the malicious data mixed in. Use multiple encoding layers for anti-AI resistance.',
+  builder: true,
 };

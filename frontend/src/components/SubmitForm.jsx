@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { post } from '../api/client';
 
-const CATEGORIES = ['web', 'forensics', 'cryptography', 'osint', 'network', 'pwn'];
+const CATEGORIES = ['web', 'forensics', 'crypto', 'osint', 'network', 'pwn'];
 const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
 
 export default function SubmitForm({ onSubmitted }) {

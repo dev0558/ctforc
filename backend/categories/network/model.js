@@ -10,7 +10,10 @@ export default {
     { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Protocol-specific exploits, encrypted traffic' },
     { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Custom protocols, covert channels, traffic manipulation' },
   ],
+  artifactTypes: ['PCAP generator', 'Network capture', 'Topology diagram', 'Solver script', 'Writeup'],
   outputFiles: ['generate_pcap.py', 'capture.pcap', 'network_topology.txt', 'solve.py', 'writeup.md'],
+  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  supportsDocker: true,
   formFields: [
     { name: 'protocol', label: 'Target Protocol', type: 'select', options: ['HTTP/HTTPS', 'DNS', 'TCP/UDP', 'FTP', 'SMB', 'SSH', 'ICMP', 'Custom Protocol', 'Other'] },
     { name: 'attackType', label: 'Network Attack', type: 'select', options: ['Packet Analysis', 'Traffic Decryption', 'Covert Channel', 'ARP Spoofing', 'DNS Hijacking', 'Protocol Exploitation', 'Credential Sniffing', 'Other'] },
@@ -22,4 +25,5 @@ export default {
     'Identify covert DNS tunneling channel hiding data in CNAME record responses',
   ],
   promptHints: 'Generate realistic PCAP files with believable background traffic. Hide challenge data within protocol-specific fields. Include network topology diagrams when relevant.',
+  builder: true,
 };
