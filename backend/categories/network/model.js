@@ -1,0 +1,25 @@
+export default {
+  id: 'network',
+  name: 'Network',
+  description: 'Packet analysis, protocol exploitation, traffic decryption, network reconnaissance, and infrastructure attacks.',
+  icon: 'wifi',
+  color: '#57cbff',
+  defaultTechStack: ['Python', 'Scapy', 'Wireshark', 'Docker'],
+  difficulties: [
+    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Basic packet analysis, plaintext credentials' },
+    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Protocol-specific exploits, encrypted traffic' },
+    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Custom protocols, covert channels, traffic manipulation' },
+  ],
+  outputFiles: ['generate_pcap.py', 'capture.pcap', 'network_topology.txt', 'solve.py', 'writeup.md'],
+  formFields: [
+    { name: 'protocol', label: 'Target Protocol', type: 'select', options: ['HTTP/HTTPS', 'DNS', 'TCP/UDP', 'FTP', 'SMB', 'SSH', 'ICMP', 'Custom Protocol', 'Other'] },
+    { name: 'attackType', label: 'Network Attack', type: 'select', options: ['Packet Analysis', 'Traffic Decryption', 'Covert Channel', 'ARP Spoofing', 'DNS Hijacking', 'Protocol Exploitation', 'Credential Sniffing', 'Other'] },
+    { name: 'includeTopology', label: 'Include Network Topology', type: 'checkbox', default: false },
+  ],
+  exampleIdeas: [
+    'Analyze PCAP to detect HTTP/2 Rapid Reset attack patterns and extract the C2 server address',
+    'Decrypt TLS traffic using a leaked session key to find exfiltrated data',
+    'Identify covert DNS tunneling channel hiding data in CNAME record responses',
+  ],
+  promptHints: 'Generate realistic PCAP files with believable background traffic. Hide challenge data within protocol-specific fields. Include network topology diagrams when relevant.',
+};

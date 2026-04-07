@@ -8,6 +8,7 @@ import jobsRoutes from './api/routes/jobs.js';
 import specsRoutes from './api/routes/specs.js';
 import challengesRoutes from './api/routes/challenges.js';
 import statsRoutes from './api/routes/stats.js';
+import categoriesRoutes from './api/routes/categories.js';
 
 async function start() {
   // Initialize database
@@ -42,6 +43,7 @@ async function start() {
   app.use('/api/specs', specsRoutes);
   app.use('/api/challenges', challengesRoutes);
   app.use('/api/stats', statsRoutes);
+  app.use('/api/categories', categoriesRoutes);
 
   app.listen(config.port, () => {
     console.log(`[Server] CTF Orchestrator running on port ${config.port}`);

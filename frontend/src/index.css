@@ -496,3 +496,109 @@ tr:hover td {
 .gap-16 { gap: 16px; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
+.mb-8 { margin-bottom: 8px; }
+
+/* Category grid */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.category-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.category-card:hover {
+  border-left-color: var(--card-accent, var(--accent-teal));
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.category-card-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.category-card-content h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+}
+
+.category-card-content p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.category-card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Difficulty buttons */
+.difficulty-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
+}
+
+.difficulty-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.difficulty-btn.active {
+  border-color: var(--accent-teal);
+  background: rgba(100, 255, 218, 0.05);
+  color: var(--text-primary);
+}
+
+.difficulty-btn .difficulty-level {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: capitalize;
+  margin-bottom: 4px;
+}
+
+.difficulty-btn .difficulty-points {
+  display: block;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-teal);
+  margin-bottom: 2px;
+}
+
+.difficulty-btn .difficulty-time {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+}

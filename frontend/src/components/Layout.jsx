@@ -18,7 +18,15 @@ export default function Layout({ children }) {
             </svg>
             Dashboard
           </NavLink>
-          <NavLink to="/?view=queue" className={({ isActive }) => false ? 'active' : ''}>
+          <NavLink to="/create" className={({ isActive }) => isActive ? 'active' : ''}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="8" cy="8" r="7" />
+              <line x1="8" y1="4" x2="8" y2="12" />
+              <line x1="4" y1="8" x2="12" y2="8" />
+            </svg>
+            Create Challenge
+          </NavLink>
+          <NavLink to="/?view=queue" className={() => ''}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <line x1="2" y1="4" x2="14" y2="4" />
               <line x1="2" y1="8" x2="14" y2="8" />
@@ -26,7 +34,7 @@ export default function Layout({ children }) {
             </svg>
             Queue
           </NavLink>
-          <NavLink to="/?view=packages" className={({ isActive }) => false ? 'active' : ''}>
+          <NavLink to="/?view=packages" className={() => ''}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <rect x="2" y="4" width="12" height="10" rx="1" />
               <path d="M5 4V2h6v2" />
@@ -36,7 +44,7 @@ export default function Layout({ children }) {
           </NavLink>
         </nav>
         <div style={{ padding: '16px', borderTop: '1px solid var(--border-color)', fontSize: '11px', color: 'var(--text-muted)' }}>
-          v1.0.0 - Phase 1
+          v2.0.0 - Phase 2
         </div>
       </aside>
       <main className="main-content">
