@@ -1,74 +1,8 @@
 import { Worker } from 'bullmq';
 import { getConnection } from '../index.js';
 import { getJob, updateJobStatus, createSpec } from '../../db/client.js';
-
-const MOCK_SPECS = {
-  web: (cveId, idea) => ({
-    challenge_name: cveId ? `Web Exploit - ${cveId}` : `Web Challenge - ${idea?.substring(0, 30)}`,
-    category: 'web',
-    difficulty: 'medium',
-    points: 400,
-    narrative: cveId
-      ? `A vulnerable web application has been identified with ${cveId}. Your mission is to exploit this vulnerability and retrieve the flag.`
-      : `${idea || 'A custom web exploitation challenge.'}`,
-    tech_stack: ['Python', 'Flask', 'Docker'],
-    vulnerability: { type: 'Injection', cwe: 'CWE-94' },
-    exploit_path: [
-      'Enumerate the web application',
-      'Identify the vulnerable endpoint',
-      'Craft and deliver the exploit payload',
-      'Retrieve the flag from the server',
-    ],
-    flags: [`Exploit3rs{${(cveId || 'web').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_pwn3d}`],
-    hints: [
-      'Look at input validation on form fields',
-      'Try common injection payloads',
-    ],
-    anti_ai_measures: [
-      'Multi-step exploitation required',
-      'Obfuscated flag location',
-      'Custom binary verification',
-    ],
-    estimated_time: '45 minutes',
-    files_needed: ['Dockerfile', 'app.py', 'requirements.txt', 'exploit.py', 'writeup.md'],
-  }),
-  forensics: (cveId, idea) => ({
-    challenge_name: cveId ? `Forensics - ${cveId}` : `Forensics Challenge`,
-    category: 'forensics',
-    difficulty: 'medium',
-    points: 350,
-    narrative: idea || 'Analyze the provided artifacts to find the hidden flag.',
-    tech_stack: ['Wireshark', 'Python', 'volatility'],
-    vulnerability: { type: 'Data Exfiltration', cwe: 'CWE-200' },
-    exploit_path: ['Extract artifacts', 'Analyze patterns', 'Decode hidden data', 'Retrieve flag'],
-    flags: ['Exploit3rs{f0r3ns1cs_m4st3r}'],
-    hints: ['Check file headers', 'Look for steganography'],
-    anti_ai_measures: ['Custom encoding scheme', 'Multi-layer obfuscation'],
-    estimated_time: '30 minutes',
-    files_needed: ['capture.pcap', 'analysis.py', 'writeup.md'],
-  }),
-  default: (cveId, idea, category) => ({
-    challenge_name: cveId ? `${category || 'Challenge'} - ${cveId}` : `${category || 'Custom'} Challenge`,
-    category: category || 'web',
-    difficulty: 'medium',
-    points: 300,
-    narrative: idea || `Exploit the vulnerability identified in ${cveId || 'the target system'}.`,
-    tech_stack: ['Python', 'Docker'],
-    vulnerability: { type: 'Various', cwe: 'CWE-1000' },
-    exploit_path: ['Reconnaissance', 'Identify vulnerability', 'Exploit', 'Capture flag'],
-    flags: [`Exploit3rs{ch4ll3ng3_s0lv3d}`],
-    hints: ['Read the description carefully', 'Enumerate thoroughly'],
-    anti_ai_measures: ['Custom protocol implementation', 'Time-based verification'],
-    estimated_time: '30 minutes',
-    files_needed: ['Dockerfile', 'challenge.py', 'exploit.py', 'writeup.md'],
-  }),
-};
-
-function generateMockSpec(job) {
-  const category = job.category || 'web';
-  const generator = MOCK_SPECS[category] || MOCK_SPECS.default;
-  return generator(job.cve_id, job.idea_text, category);
-}
+import { researchCVE, researchIdea } from '../../researcher/index.js';
+import config from '../../config.js';
 
 let worker = null;
 
@@ -77,48 +11,83 @@ export function startResearcherWorker() {
     'research-queue',
     async (bullJob) => {
       const { jobId } = bullJob.data;
-      console.log(`[Researcher] Processing job ${jobId}`);
+      console.log(`[Researcher Worker] Processing job ${jobId}`);
 
       const job = getJob(jobId);
       if (!job) {
-        console.error(`[Researcher] Job ${jobId} not found`);
+        console.error(`[Researcher Worker] Job ${jobId} not found`);
         return;
       }
 
+      const label = job.cve_id || `idea: "${(job.idea_text || '').substring(0, 40)}"`;
+      console.log(`[Researcher Worker] ${jobId} | ${label}`);
+
       updateJobStatus(jobId, 'researching');
 
-      // Simulate research delay
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      try {
+        let result;
 
-      const spec = generateMockSpec(job);
-      const tokenUsage = Math.floor(Math.random() * 2000) + 800;
+        if (job.cve_id) {
+          result = await researchCVE(job.cve_id);
+        } else if (job.idea_text) {
+          result = await researchIdea(
+            job.idea_text,
+            job.category || 'web',
+            job.difficulty || 'medium'
+          );
+        } else {
+          throw new Error(`Invalid job data: no cve_id or idea_text`);
+        }
 
-      createSpec({
-        jobId,
-        specJson: spec,
-        tokenUsage,
-        generationTimeMs: 3000,
-      });
+        // Save spec to database
+        createSpec({
+          jobId,
+          specJson: result.spec,
+          tokenUsage: result.tokenUsage,
+          generationTimeMs: result.durationMs,
+        });
 
-      updateJobStatus(jobId, 'pending_spec_review');
-      console.log(`[Researcher] Job ${jobId} spec ready for review`);
+        // Update job status and category if CVE research detected a different one
+        updateJobStatus(jobId, 'pending_spec_review');
+
+        console.log(`[Researcher Worker] ${jobId} complete: "${result.spec.challengeName}" | ${result.tokenUsage} tokens`);
+        return { jobId, status: 'pending_spec_review', challengeName: result.spec.challengeName };
+      } catch (err) {
+        console.error(`[Researcher Worker] ${jobId} error:`, err.message);
+
+        // Update retry count
+        const currentJob = getJob(jobId);
+        const retryCount = (currentJob?.retry_count || 0) + 1;
+
+        if (retryCount >= config.queue.researcherMaxRetries) {
+          updateJobStatus(jobId, 'failed', err.message);
+        } else {
+          // Keep in researching state, update error and retry count
+          const { getDb } = await import('../../db/client.js');
+          getDb().run(
+            `UPDATE jobs SET error_message = ?, retry_count = ?, updated_at = datetime('now') WHERE id = ?`,
+            [err.message, retryCount, jobId]
+          );
+        }
+
+        throw err; // Let BullMQ handle retry
+      }
     },
     {
       connection: getConnection(),
-      concurrency: 5,
+      concurrency: config.queue.researcherConcurrency,
     }
   );
 
-  worker.on('failed', (bullJob, err) => {
-    console.error(`[Researcher] Job ${bullJob?.data?.jobId} failed:`, err.message);
-    if (bullJob?.data?.jobId) {
-      try {
-        updateJobStatus(bullJob.data.jobId, 'failed', err.message);
-      } catch {}
-    }
+  worker.on('completed', (bullJob, result) => {
+    console.log(`[Researcher Worker] Job ${bullJob.id} completed successfully`);
   });
 
-  console.log('[Researcher] Worker started');
+  worker.on('failed', (bullJob, err) => {
+    console.error(`[Researcher Worker] Job ${bullJob?.id} failed:`, err.message);
+  });
+
+  console.log('[Researcher Worker] Started (Phase 2: real Claude API)');
   return worker;
 }
 
