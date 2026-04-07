@@ -15,7 +15,7 @@ function getClient() {
  * Retries up to maxRetries times if JSON parsing fails.
  * Returns { result, tokenUsage, durationMs }
  */
-export async function generateJSON({ systemPrompt, userPrompt, maxRetries = 2 }) {
+export async function generateJSON({ systemPrompt, userPrompt, maxRetries = 2, maxTokens = 8192 }) {
   const anthropic = getClient();
   let lastError = null;
 
@@ -32,7 +32,7 @@ export async function generateJSON({ systemPrompt, userPrompt, maxRetries = 2 })
 
       const response = await anthropic.messages.create({
         model: config.claude.model,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: [{ role: 'user', content: promptToSend }],
       });
