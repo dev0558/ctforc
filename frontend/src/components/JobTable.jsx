@@ -23,6 +23,12 @@ function getReviewLink(job) {
   if (job.status === 'pending_build_review') {
     return <Link to={`/review/build/${job.id}`} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>Review Build</Link>;
   }
+  if (job.status === 'reworking_spec') {
+    return <Link to={`/review/spec/${job.id}`} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 10px', opacity: 0.7 }}>Reworking...</Link>;
+  }
+  if (job.status === 'reworking_build') {
+    return <Link to={`/review/build/${job.id}`} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 10px', opacity: 0.7 }}>Reworking...</Link>;
+  }
   return <Link to={`/jobs/${job.id}`} className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 10px' }}>Details</Link>;
 }
 

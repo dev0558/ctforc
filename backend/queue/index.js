@@ -44,5 +44,15 @@ export async function addResearchJob(jobId) {
 
 export async function addBuildJob(jobId) {
   const queue = getBuildQueue();
-  await queue.add('build', { jobId }, { jobId });
+  await queue.add('build', { jobId }, { jobId: `build-${jobId}-${Date.now()}` });
+}
+
+export async function addReworkSpecJob(jobId, feedback) {
+  const queue = getResearchQueue();
+  await queue.add('rework-spec', { jobId, feedback, type: 'rework-spec' }, { jobId: `rework-spec-${jobId}-${Date.now()}` });
+}
+
+export async function addReworkBuildJob(jobId, feedback) {
+  const queue = getBuildQueue();
+  await queue.add('rework-build', { jobId, feedback, type: 'rework-build' }, { jobId: `rework-build-${jobId}-${Date.now()}` });
 }

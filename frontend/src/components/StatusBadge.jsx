@@ -8,6 +8,9 @@ const STATUS_LABELS = {
   ready: 'Ready',
   failed: 'Failed',
   rejected: 'Rejected',
+  reworking_spec: 'Reworking Spec',
+  reworking_build: 'Reworking Build',
+  rejected_final: 'Rejected (Final)',
 };
 
 export default function StatusBadge({ status }) {

@@ -1,9 +1,16 @@
 import { Worker } from 'bullmq';
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { getConnection } from '../index.js';
-import { getJob, getSpec, updateJobStatus, createChallenge } from '../../db/client.js';
+import { getJob, getSpec, getChallenge, updateJobStatus, updateChallenge, createChallenge } from '../../db/client.js';
 import { getCategory } from '../../categories/index.js';
 import { buildChallenge, saveFiles } from '../../categories/baseBuilder.js';
+import { generateJSON } from '../../agents/claudeClient.js';
 import config from '../../config.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROMPTS_DIR = resolve(__dirname, '..', '..', 'agents', 'prompts');
 
 let worker = null;
 
@@ -11,74 +18,13 @@ export function startBuilderWorker() {
   worker = new Worker(
     'build-queue',
     async (bullJob) => {
-      const { jobId } = bullJob.data;
-      console.log(`[Builder Worker] Processing ${jobId}`);
+      const { jobId, type, feedback } = bullJob.data;
 
-      // Get the job and its approved spec
-      const job = getJob(jobId);
-      if (!job) {
-        throw new Error(`Job ${jobId} not found`);
+      if (type === 'rework-build') {
+        return await handleReworkBuild(jobId, feedback);
       }
 
-      const specRow = getSpec(jobId);
-      if (!specRow) {
-        throw new Error(`No spec found for job ${jobId}`);
-      }
-
-      // Parse the approved spec
-      let approvedSpec;
-      try {
-        approvedSpec = typeof specRow.spec_json === 'string'
-          ? JSON.parse(specRow.spec_json)
-          : specRow.spec_json;
-      } catch (err) {
-        throw new Error(`Failed to parse spec JSON for job ${jobId}: ${err.message}`);
-      }
-
-      const categoryId = approvedSpec.category || job.category || 'web';
-      const category = getCategory(categoryId);
-
-      if (!category) {
-        throw new Error(`Unknown category: ${categoryId}`);
-      }
-
-      console.log(`[Builder Worker] Category: ${categoryId} | Challenge: "${approvedSpec.challengeName}"`);
-
-      // Update status to building
-      updateJobStatus(jobId, 'building');
-
-      try {
-        // Call the real builder via Claude API using baseBuilder
-        const result = await buildChallenge(approvedSpec, categoryId);
-
-        // Save files to storage on disk
-        saveFiles(jobId, result.files);
-
-        // Convert files object to file_manifest array format for DB compatibility
-        const fileManifest = result.fileList.map((filePath) => ({
-          path: filePath,
-          language: detectLanguage(filePath),
-          content: result.files[filePath],
-        }));
-
-        // Save challenge record to database
-        createChallenge({
-          jobId,
-          fileManifest,
-          tokenUsage: result.tokenUsage,
-          generationTimeMs: result.durationMs,
-        });
-
-        // Update job status
-        updateJobStatus(jobId, 'pending_build_review');
-
-        console.log(`[Builder Worker] ${jobId} complete: ${result.fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
-        return { jobId, status: 'pending_build_review', filesCount: result.fileList.length };
-      } catch (err) {
-        console.error(`[Builder Worker] ${jobId} build error:`, err.message);
-        updateJobStatus(jobId, 'failed', `Build failed: ${err.message}`);
-        throw err;
-      }
+      return await handleBuild(jobId);
     },
     {
       connection: getConnection(),
@@ -87,15 +33,184 @@ export function startBuilderWorker() {
   );
 
   worker.on('completed', (bullJob, result) => {
-    console.log(`[Builder Worker] BullMQ job ${bullJob.id} completed: ${result?.filesCount} files`);
+    console.log(`[Builder Worker] BullMQ job ${bullJob.id} completed: ${result?.filesCount || 0} files`);
   });
 
   worker.on('failed', (bullJob, err) => {
     console.error(`[Builder Worker] BullMQ job ${bullJob?.id} failed:`, err.message);
   });
 
-  console.log('[Builder Worker] Started (Phase 3: real Claude API builders)');
+  console.log('[Builder Worker] Started (Phase 3: real Claude API builders + rework support)');
   return worker;
+}
+
+/**
+ * Handle normal build jobs.
+ */
+async function handleBuild(jobId) {
+  console.log(`[Builder Worker] Processing ${jobId}`);
+
+  const job = getJob(jobId);
+  if (!job) {
+    throw new Error(`Job ${jobId} not found`);
+  }
+
+  const specRow = getSpec(jobId);
+  if (!specRow) {
+    throw new Error(`No spec found for job ${jobId}`);
+  }
+
+  let approvedSpec;
+  try {
+    approvedSpec = typeof specRow.spec_json === 'string'
+      ? JSON.parse(specRow.spec_json)
+      : specRow.spec_json;
+  } catch (err) {
+    throw new Error(`Failed to parse spec JSON for job ${jobId}: ${err.message}`);
+  }
+
+  const categoryId = approvedSpec.category || job.category || 'web';
+  const category = getCategory(categoryId);
+
+  if (!category) {
+    throw new Error(`Unknown category: ${categoryId}`);
+  }
+
+  console.log(`[Builder Worker] Category: ${categoryId} | Challenge: "${approvedSpec.challengeName}"`);
+
+  updateJobStatus(jobId, 'building');
+
+  try {
+    const result = await buildChallenge(approvedSpec, categoryId);
+
+    saveFiles(jobId, result.files);
+
+    const fileManifest = result.fileList.map((filePath) => ({
+      path: filePath,
+      language: detectLanguage(filePath),
+      content: result.files[filePath],
+    }));
+
+    createChallenge({
+      jobId,
+      fileManifest,
+      tokenUsage: result.tokenUsage,
+      generationTimeMs: result.durationMs,
+    });
+
+    updateJobStatus(jobId, 'pending_build_review');
+
+    console.log(`[Builder Worker] ${jobId} complete: ${result.fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
+    return { jobId, status: 'pending_build_review', filesCount: result.fileList.length };
+  } catch (err) {
+    console.error(`[Builder Worker] ${jobId} build error:`, err.message);
+    updateJobStatus(jobId, 'failed', `Build failed: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Handle build rework jobs — load rejected build + feedback, call Claude to revise.
+ */
+async function handleReworkBuild(jobId, feedback) {
+  console.log(`[Builder Worker] Reworking build for job ${jobId}`);
+
+  const job = getJob(jobId);
+  if (!job) {
+    throw new Error(`Job ${jobId} not found`);
+  }
+
+  const specRow = getSpec(jobId);
+  if (!specRow) {
+    throw new Error(`No spec found for job ${jobId}`);
+  }
+
+  const approvedSpec = typeof specRow.spec_json === 'string'
+    ? JSON.parse(specRow.spec_json)
+    : specRow.spec_json;
+
+  const challengeRow = getChallenge(jobId);
+  if (!challengeRow) {
+    throw new Error(`No challenge found for job ${jobId}`);
+  }
+
+  const existingFiles = typeof challengeRow.file_manifest === 'string'
+    ? JSON.parse(challengeRow.file_manifest)
+    : challengeRow.file_manifest;
+
+  // Convert file_manifest array back to files object for the prompt
+  const filesObj = {};
+  if (Array.isArray(existingFiles)) {
+    for (const f of existingFiles) {
+      filesObj[f.path] = f.content;
+    }
+  } else if (existingFiles && typeof existingFiles === 'object') {
+    Object.assign(filesObj, existingFiles);
+  }
+
+  // Load rework-build prompt and inject flags
+  const promptPath = resolve(PROMPTS_DIR, 'rework-build.md');
+  let systemPrompt;
+  try {
+    systemPrompt = readFileSync(promptPath, 'utf-8');
+  } catch {
+    throw new Error('rework-build.md prompt not found');
+  }
+
+  const realFlag = approvedSpec.flag || 'Exploit3rs{default_flag}';
+  const honeypotFlag = approvedSpec.honeypotFlag || 'Exploit3rs{fake_flag}';
+  systemPrompt = systemPrompt.replace(/\{FLAG\}/g, realFlag);
+  systemPrompt = systemPrompt.replace(/\{HONEYPOT_FLAG\}/g, honeypotFlag);
+
+  const userPrompt = [
+    `== APPROVED SPEC ==`,
+    JSON.stringify(approvedSpec, null, 2),
+    ``,
+    `== EXISTING BUILD (REJECTED) ==`,
+    JSON.stringify({ files: filesObj }, null, 2),
+    ``,
+    `== REVIEWER FEEDBACK ==`,
+    feedback,
+    ``,
+    `== REVISION NUMBER ==`,
+    `This is build revision ${job.build_revision || 2} of 3. Fix ALL issues raised in the feedback.`,
+  ].join('\n');
+
+  updateJobStatus(jobId, 'building');
+
+  try {
+    const { result, tokenUsage, durationMs } = await generateJSON({
+      systemPrompt,
+      userPrompt,
+      maxRetries: 2,
+      maxTokens: 8192,
+    });
+
+    if (!result.files || typeof result.files !== 'object') {
+      throw new Error('Rework output missing "files" object');
+    }
+
+    // Save revised files to disk
+    saveFiles(jobId, result.files);
+
+    // Update challenge in DB
+    const fileList = Object.keys(result.files);
+    const fileManifest = fileList.map((filePath) => ({
+      path: filePath,
+      language: detectLanguage(filePath),
+      content: result.files[filePath],
+    }));
+
+    updateChallenge(jobId, fileManifest, tokenUsage, durationMs);
+    updateJobStatus(jobId, 'pending_build_review');
+
+    console.log(`[Builder Worker] ${jobId} build rework complete (rev ${job.build_revision}) | ${fileList.length} files | ${tokenUsage} tokens`);
+    return { jobId, status: 'pending_build_review', filesCount: fileList.length };
+  } catch (err) {
+    console.error(`[Builder Worker] ${jobId} build rework failed:`, err.message);
+    updateJobStatus(jobId, 'failed', `Build rework failed: ${err.message}`);
+    throw err;
+  }
 }
 
 export function getBuilderWorker() {
@@ -115,7 +230,6 @@ function detectLanguage(filePath) {
     txt: 'text', dockerfile: 'dockerfile', conf: 'text', cfg: 'text',
     pem: 'text', key: 'text',
   };
-  // Handle "Dockerfile" (no extension)
   if (filePath.toLowerCase().endsWith('dockerfile')) return 'dockerfile';
   if (filePath.toLowerCase().endsWith('makefile')) return 'makefile';
   return map[ext] || 'text';

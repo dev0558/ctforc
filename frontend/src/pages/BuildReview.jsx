@@ -5,8 +5,6 @@ import StatusBadge from '../components/StatusBadge';
 
 /**
  * Group flat file paths into a tree structure for the sidebar.
- * Input: ["source/app.py", "source/Dockerfile", "writeup/WRITEUP.md"]
- * Output: { source: { "app.py": null, "Dockerfile": null }, writeup: { "WRITEUP.md": null } }
  */
 function buildFileTree(filePaths) {
   const tree = {};
@@ -16,7 +14,7 @@ function buildFileTree(filePaths) {
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       if (i === parts.length - 1) {
-        node[part] = null; // leaf file
+        node[part] = null;
       } else {
         if (!node[part]) node[part] = {};
         node = node[part];
@@ -41,7 +39,6 @@ function FileTreeNode({ name, node, depth, prefix, selectedPath, onSelect }) {
           textAlign: 'left',
           padding: '4px 8px 4px ' + (12 + depth * 14) + 'px',
           background: isSelected ? 'rgba(100, 255, 218, 0.1)' : 'transparent',
-          borderLeft: isSelected ? '2px solid var(--accent-teal)' : '2px solid transparent',
           border: 'none',
           borderLeft: isSelected ? '2px solid var(--accent-teal)' : '2px solid transparent',
           color: isSelected ? 'var(--accent-teal)' : 'var(--text-secondary)',
@@ -55,7 +52,6 @@ function FileTreeNode({ name, node, depth, prefix, selectedPath, onSelect }) {
     );
   }
 
-  // Directory
   return (
     <div>
       <div style={{ padding: '4px 8px 4px ' + (12 + depth * 14) + 'px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
@@ -92,18 +88,16 @@ export default function BuildReview() {
   useEffect(() => {
     async function load() {
       try {
-        // Load challenge data from DB
         const res = await get(`/challenges/${jobId}`);
         setData(res);
 
-        // Also try to load files from disk (Phase 3 storage)
         try {
           const fileRes = await get(`/challenge-files/${jobId}`);
           if (fileRes.totalFiles > 0) {
             setDiskFiles(fileRes.files);
           }
         } catch {
-          // Disk files may not exist for older/mock challenges — that's fine
+          // Disk files may not exist for older/mock challenges
         }
       } catch (err) {
         setError(err.message);
@@ -115,10 +109,15 @@ export default function BuildReview() {
   }, [jobId]);
 
   async function handleReview(action) {
+    if (action === 'reject' && (!rejectNotes || rejectNotes.trim().length === 0)) {
+      setError('Feedback is required when rejecting for rework. Provide notes explaining what to fix.');
+      return;
+    }
     setSubmitting(true);
+    setError('');
     try {
       const body = { action };
-      if (action === 'reject' && rejectNotes) {
+      if ((action === 'reject' || action === 'reject_final') && rejectNotes) {
         body.notes = rejectNotes;
       }
       await post(`/challenges/${jobId}/review`, body);
@@ -131,31 +130,30 @@ export default function BuildReview() {
   }
 
   if (loading) return <div className="text-muted">Loading...</div>;
-  if (error) return <div style={{ color: 'var(--accent-coral)' }}>Error: {error}</div>;
+  if (error && !data) return <div style={{ color: 'var(--accent-coral)' }}>Error: {error}</div>;
   if (!data) return <div className="text-muted">Not found</div>;
 
   const { job, spec, challenge } = data;
   const canReview = job.status === 'pending_build_review';
+  const revision = job.build_revision || 1;
+  const isRework = revision > 1;
+  const maxRevisionsReached = revision >= 3;
 
-  // Merge file sources: prefer disk files (Phase 3), fall back to DB manifest
+  // Merge file sources: prefer disk files, fall back to DB manifest
   let files = {};
   let filePaths = [];
 
   if (diskFiles && Object.keys(diskFiles).length > 0) {
-    // Phase 3: files from disk with full content
     files = diskFiles;
     filePaths = Object.keys(diskFiles).sort();
   } else if (challenge?.file_manifest && Array.isArray(challenge.file_manifest)) {
-    // Phase 1/2: files from DB manifest
     for (const f of challenge.file_manifest) {
       files[f.path] = { content: f.content, language: f.language, size: f.content?.length || 0 };
     }
     filePaths = challenge.file_manifest.map((f) => f.path);
   }
 
-  // Set initial selection
   if (!selectedPath && filePaths.length > 0) {
-    // Pick the first "interesting" file (writeup, app source, etc.)
     const preferred = filePaths.find((f) => f.includes('WRITEUP') || f.includes('writeup.md'))
       || filePaths.find((f) => f.includes('app.py') || f.includes('app.js'))
       || filePaths[0];
@@ -170,7 +168,22 @@ export default function BuildReview() {
   return (
     <div>
       <div className="page-header">
-        <h2>Build Review</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2>Build Review</h2>
+          {isRework && (
+            <span style={{
+              padding: '3px 10px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono)',
+              background: 'rgba(255, 165, 0, 0.15)',
+              color: '#ffa500',
+            }}>
+              Build Rev {revision}/3
+            </span>
+          )}
+        </div>
         <div className="breadcrumb">
           Job {job.id.substring(0, 8)} / {job.cve_id || challengeName} / <StatusBadge status={job.status} />
         </div>
@@ -260,6 +273,12 @@ export default function BuildReview() {
               Review Actions
             </div>
 
+            {error && (
+              <div style={{ color: 'var(--accent-coral)', fontSize: '12px', marginBottom: '12px', padding: '8px', background: 'rgba(255, 107, 107, 0.1)', borderRadius: '4px' }}>
+                {error}
+              </div>
+            )}
+
             {canReview ? (
               <div className="review-actions">
                 <button
@@ -272,26 +291,53 @@ export default function BuildReview() {
                 </button>
 
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                    Feedback {maxRevisionsReached ? '(max revisions reached)' : '(required for rework)'}
+                  </div>
                   <textarea
                     value={rejectNotes}
                     onChange={(e) => setRejectNotes(e.target.value)}
-                    placeholder="Rejection feedback..."
+                    placeholder="What needs to be fixed? Be specific..."
                     rows={3}
                     style={{ width: '100%', marginBottom: '8px' }}
                   />
+
+                  {!maxRevisionsReached && (
+                    <button
+                      className="btn btn-danger"
+                      style={{ width: '100%', justifyContent: 'center', marginBottom: '8px' }}
+                      onClick={() => handleReview('reject')}
+                      disabled={submitting || !rejectNotes.trim()}
+                    >
+                      Reject &amp; Rework (Build Rev {revision + 1}/3)
+                    </button>
+                  )}
+
                   <button
-                    className="btn btn-danger"
-                    style={{ width: '100%', justifyContent: 'center' }}
-                    onClick={() => handleReview('reject')}
+                    className="btn"
+                    style={{
+                      width: '100%',
+                      justifyContent: 'center',
+                      background: 'rgba(255, 50, 50, 0.2)',
+                      color: '#ff3232',
+                    }}
+                    onClick={() => handleReview('reject_final')}
                     disabled={submitting}
                   >
-                    Reject Build
+                    {maxRevisionsReached ? 'Reject Permanently' : 'Reject Permanently (Skip Rework)'}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="text-muted" style={{ fontSize: '13px' }}>
-                This build has already been reviewed.
+                {job.status === 'reworking_build' ? (
+                  <div>
+                    <div style={{ color: '#ffa500', fontWeight: 600, marginBottom: '4px' }}>AI is reworking this build...</div>
+                    <div>Build revision {revision}/3 in progress.</div>
+                  </div>
+                ) : (
+                  'This build has already been reviewed.'
+                )}
               </div>
             )}
           </div>

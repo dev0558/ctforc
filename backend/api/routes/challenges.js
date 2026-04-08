@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getJob, getSpec, getChallenge, updateJobStatus, createReview } from '../../db/client.js';
+import { getJob, getSpec, getChallenge, updateJobStatus, updateJob, createReview } from '../../db/client.js';
+import { addReworkBuildJob } from '../../queue/index.js';
 
 const router = Router();
 
 const reviewSchema = z.object({
-  action: z.enum(['approve', 'reject']),
+  action: z.enum(['approve', 'reject', 'reject_final']),
   notes: z.string().optional(),
 });
 
@@ -29,7 +30,7 @@ router.get('/:jobId', (req, res) => {
   }
 });
 
-router.post('/:jobId/review', (req, res) => {
+router.post('/:jobId/review', async (req, res) => {
   try {
     const job = getJob(req.params.jobId);
     if (!job) {
@@ -52,9 +53,40 @@ router.post('/:jobId/review', (req, res) => {
     if (parsed.action === 'approve') {
       updateJobStatus(job.id, 'ready');
       res.json({ status: 'ready', message: 'Challenge approved and ready' });
-    } else {
-      updateJobStatus(job.id, 'rejected');
-      res.json({ status: 'rejected', message: 'Challenge rejected' });
+
+    } else if (parsed.action === 'reject_final') {
+      updateJobStatus(job.id, 'rejected_final');
+      res.json({ status: 'rejected_final', message: 'Build permanently rejected' });
+
+    } else if (parsed.action === 'reject') {
+      const currentRevision = job.build_revision || 1;
+
+      if (currentRevision >= 3) {
+        updateJobStatus(job.id, 'rejected_final');
+        res.json({
+          status: 'rejected_final',
+          message: `Build rejected permanently (max ${currentRevision} revisions reached)`,
+        });
+      } else if (!parsed.notes || parsed.notes.trim().length === 0) {
+        updateJobStatus(job.id, 'rejected');
+        res.json({ status: 'rejected', message: 'Build rejected (no feedback provided for rework)' });
+      } else {
+        updateJobStatus(job.id, 'reworking_build');
+        updateJob(job.id, { build_revision: currentRevision + 1 });
+
+        try {
+          await addReworkBuildJob(job.id, parsed.notes);
+        } catch (err) {
+          console.error(`[Challenges] Failed to enqueue build rework for ${job.id}:`, err.message);
+          updateJobStatus(job.id, 'pending_build_review');
+        }
+
+        res.json({
+          status: 'reworking_build',
+          message: `Build sent for AI rework (revision ${currentRevision + 1}/3)`,
+          revision: currentRevision + 1,
+        });
+      }
     }
   } catch (err) {
     if (err instanceof z.ZodError) {

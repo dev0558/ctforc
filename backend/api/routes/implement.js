@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { createBatch, createJob } from '../../db/client.js';
+import { createBatch, createJob, findJobByCveId } from '../../db/client.js';
 import { addResearchJob } from '../../queue/index.js';
+import { checkCveDuplicate } from '../../researcher/duplicateChecker.js';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ const implementSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('cve'),
     items: z.array(cveItemSchema).min(1).max(20),
+    force: z.boolean().optional(), // Allow forcing past duplicate warnings
   }),
   z.object({
     mode: z.literal('idea'),
@@ -27,6 +29,26 @@ const implementSchema = z.discriminatedUnion('mode', [
 router.post('/', async (req, res) => {
   try {
     const parsed = implementSchema.parse(req.body);
+
+    // CVE duplicate check (unless force=true)
+    const duplicates = [];
+    if (parsed.mode === 'cve' && !parsed.force) {
+      for (const cveId of parsed.items) {
+        const dup = checkCveDuplicate(cveId, findJobByCveId);
+        if (dup) {
+          duplicates.push({ cveId, existing: dup });
+        }
+      }
+
+      if (duplicates.length > 0) {
+        return res.status(409).json({
+          error: 'Duplicate CVEs detected',
+          duplicates,
+          message: 'These CVEs already have existing jobs. Resubmit with force=true to proceed anyway.',
+        });
+      }
+    }
+
     const batch = createBatch(parsed.mode, parsed.items.length);
     const jobs = [];
 

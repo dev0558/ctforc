@@ -26,10 +26,13 @@ export async function initDb() {
       difficulty TEXT,
       status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN (
         'queued','researching','pending_spec_review','spec_approved',
-        'building','pending_build_review','ready','failed','rejected'
+        'building','pending_build_review','ready','failed','rejected',
+        'reworking_spec','reworking_build','rejected_final'
       )),
       error_message TEXT,
       retry_count INTEGER NOT NULL DEFAULT 0,
+      spec_revision INTEGER NOT NULL DEFAULT 1,
+      build_revision INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -62,7 +65,7 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       job_id TEXT NOT NULL REFERENCES jobs(id),
       stage TEXT NOT NULL CHECK(stage IN ('spec', 'build')),
-      action TEXT NOT NULL CHECK(action IN ('approve', 'reject', 'edit_approve')),
+      action TEXT NOT NULL CHECK(action IN ('approve', 'reject', 'edit_approve', 'reject_final')),
       notes TEXT,
       edited_data TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -150,6 +153,56 @@ export function updateJobStatus(id, status, errorMessage = null) {
   getDb().run(
     `UPDATE jobs SET status = ?, error_message = ?, updated_at = datetime('now') WHERE id = ?`,
     [status, errorMessage, id]
+  );
+}
+
+export function updateJob(id, fields) {
+  const sets = [];
+  const vals = [];
+  for (const [key, val] of Object.entries(fields)) {
+    sets.push(`${key} = ?`);
+    vals.push(val);
+  }
+  sets.push(`updated_at = datetime('now')`);
+  vals.push(id);
+  getDb().run(`UPDATE jobs SET ${sets.join(', ')} WHERE id = ?`, vals);
+}
+
+export function findJobByCveId(cveId) {
+  const stmt = getDb().prepare('SELECT * FROM jobs WHERE cve_id = ? ORDER BY created_at DESC LIMIT 1');
+  stmt.bind([cveId]);
+  const row = stmt.step() ? stmt.getAsObject() : null;
+  stmt.free();
+  return row;
+}
+
+export function getAllSpecs() {
+  const stmt = getDb().prepare('SELECT * FROM specs');
+  const rows = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    if (row.spec_json) {
+      try { row.spec_json = JSON.parse(row.spec_json); } catch {}
+    }
+    rows.push(row);
+  }
+  stmt.free();
+  return rows;
+}
+
+export function updateSpec(jobId, specJson, tokenUsage = 0, generationTimeMs = 0) {
+  const jsonStr = typeof specJson === 'string' ? specJson : JSON.stringify(specJson);
+  getDb().run(
+    `UPDATE specs SET spec_json = ?, token_usage = ?, generation_time_ms = ? WHERE job_id = ?`,
+    [jsonStr, tokenUsage, generationTimeMs, jobId]
+  );
+}
+
+export function updateChallenge(jobId, fileManifest, tokenUsage = 0, generationTimeMs = 0) {
+  const jsonStr = typeof fileManifest === 'string' ? fileManifest : JSON.stringify(fileManifest);
+  getDb().run(
+    `UPDATE challenges SET file_manifest = ?, token_usage = ?, generation_time_ms = ? WHERE job_id = ?`,
+    [jsonStr, tokenUsage, generationTimeMs, jobId]
   );
 }
 
@@ -265,7 +318,7 @@ export function getStats() {
   const estimatedCost = (totalTokens / 1000000) * 3; // rough estimate
 
   // Approval rate
-  const reviewStmt = d.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN action IN ('approve','edit_approve') THEN 1 ELSE 0 END) as approved FROM reviews");
+  const reviewStmt = d.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN action IN ('approve','edit_approve') THEN 1 ELSE 0 END) as approved FROM reviews WHERE action != 'reject_final'");
   reviewStmt.step();
   const reviewRow = reviewStmt.getAsObject();
   reviewStmt.free();
