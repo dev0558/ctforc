@@ -105,8 +105,8 @@ export function enrichContext(nvdData, categorizedRefs) {
   const difficulty = suggestDifficulty(nvdData.cvss, categorizedRefs);
 
   // 5. Suggest points
-  const pointsMap = { easy: 100, medium: 300, hard: 500 };
-  const points = pointsMap[difficulty] || 300;
+  const pointsMap = { warm_up: 50, easy: 150, medium: 350, hard: 700 };
+  const points = pointsMap[difficulty] || 350;
 
   return {
     cveId: nvdData.cveId,
@@ -145,6 +145,7 @@ function suggestDifficulty(cvss, refs) {
   if (refs.pocs.length > 0) score -= 1;
   if (refs.writeups.length > 0) score -= 1;
 
+  if (score <= 0) return 'warm_up';
   if (score <= 1) return 'easy';
   if (score <= 3) return 'medium';
   return 'hard';

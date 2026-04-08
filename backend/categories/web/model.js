@@ -6,13 +6,14 @@ export default {
   color: '#57cbff',
   defaultTechStack: ['Docker', 'Python', 'Flask', 'Nginx'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Basic injection or auth bypass' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Chained exploits, WAF bypass, SSTI' },
-    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Complex deserialization, multi-step RCE' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 10, description: 'Guided walkthrough, single-step vuln' },
+    { level: 'easy', points: [150], estimatedMinutes: 20, description: 'Basic injection or auth bypass' },
+    { level: 'medium', points: [350], estimatedMinutes: 45, description: 'Chained exploits, WAF bypass, SSTI' },
+    { level: 'hard', points: [700], estimatedMinutes: 90, description: 'Complex deserialization, multi-step RCE' },
   ],
   artifactTypes: ['Dockerfile', 'docker-compose.yml', 'Application source', 'Exploit script', 'Writeup'],
   outputFiles: ['Dockerfile', 'docker-compose.yml', 'app.py', 'requirements.txt', 'exploit.py', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: true,
   formFields: [
     { name: 'vulnType', label: 'Vulnerability Type', type: 'select', options: ['SQL Injection', 'XSS', 'SSTI', 'SSRF', 'File Upload', 'Auth Bypass', 'Deserialization', 'Path Traversal', 'Command Injection', 'IDOR', 'XXE', 'Prototype Pollution', 'Other'] },

@@ -11,6 +11,8 @@ export default function CreateChallenge() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dupWarning, setDupWarning] = useState(null);
+  const [honeypotEnabled, setHoneypotEnabled] = useState(true);
+  const [customHoneypot, setCustomHoneypot] = useState('');
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -65,6 +67,14 @@ export default function CreateChallenge() {
             }],
       };
 
+      // Honeypot flag handling
+      if (!honeypotEnabled) {
+        body.honeypotFlag = null;
+      } else if (customHoneypot.trim()) {
+        body.honeypotFlag = customHoneypot.trim();
+      }
+      // If honeypotEnabled but no custom value, omit field — AI generates one
+
       if (force) {
         body.force = true;
       }
@@ -72,17 +82,15 @@ export default function CreateChallenge() {
       const res = await post('/implement', body);
       navigate('/', { state: { submitted: true, batchId: res.batch_id } });
     } catch (err) {
-      // Check for duplicate CVE response (409)
       if (err.response && err.response.status === 409) {
         try {
           const dupData = typeof err.response.data === 'string' ? JSON.parse(err.response.data) : err.response.data;
           setDupWarning({ formData, duplicates: dupData.duplicates || [] });
           return;
         } catch {
-          // Fall through to generic error
+          // Fall through
         }
       }
-      // Also check if the error message contains duplicate info
       if (err.message && err.message.includes('Duplicate CVEs')) {
         setDupWarning({ formData, duplicates: [] });
         return;
@@ -157,6 +165,52 @@ export default function CreateChallenge() {
           >
             &larr; Back to Categories
           </button>
+
+          {/* Honeypot flag toggle */}
+          <div className="card mb-24">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: honeypotEnabled ? '12px' : '0' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Include honeypot (fake) flag
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Inject a decoy flag to mislead AI tools and lazy solvers
+                </div>
+              </div>
+              <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={honeypotEnabled}
+                  onChange={(e) => setHoneypotEnabled(e.target.checked)}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                  background: honeypotEnabled ? 'var(--accent-teal)' : 'var(--bg-tertiary)',
+                  borderRadius: '12px', transition: 'all 0.2s ease',
+                }} />
+                <span style={{
+                  position: 'absolute', height: '18px', width: '18px',
+                  left: honeypotEnabled ? '22px' : '3px', bottom: '3px',
+                  background: 'white', borderRadius: '50%', transition: 'all 0.2s ease',
+                }} />
+              </label>
+            </div>
+            {honeypotEnabled && (
+              <div>
+                <input
+                  type="text"
+                  value={customHoneypot}
+                  onChange={(e) => setCustomHoneypot(e.target.value)}
+                  placeholder="Exploit3rs{fake_flag_here} (leave empty for AI-generated)"
+                  style={{ width: '100%' }}
+                />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Leave empty to let the AI generate a plausible decoy flag automatically.
+                </div>
+              </div>
+            )}
+          </div>
 
           {categoryDetail && (
             <CategoryForm

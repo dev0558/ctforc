@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 const FLAG_REGEX = /^Exploit3rs\{[a-zA-Z0-9_]+\}$/;
 const CATEGORIES = ['web', 'forensics', 'crypto', 'osint', 'network', 'pwn'];
-const DIFFICULTIES = ['easy', 'medium', 'hard'];
-const POINT_VALUES = [100, 200, 300, 400, 500];
+const DIFFICULTIES = ['warm_up', 'easy', 'medium', 'hard'];
+const POINT_VALUES = [50, 150, 350, 700];
 
 export const challengeSpecSchema = z.object({
   challengeName: z
@@ -56,7 +56,9 @@ export const challengeSpecSchema = z.object({
 
   honeypotFlag: z
     .string()
-    .regex(FLAG_REGEX, 'Honeypot flag must match Exploit3rs{...} format'),
+    .regex(FLAG_REGEX, 'Honeypot flag must match Exploit3rs{...} format')
+    .nullable()
+    .optional(),
 
   antiAiCountermeasures: z
     .array(z.string())

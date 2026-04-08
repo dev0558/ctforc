@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { post } from '../api/client';
 
 const CATEGORIES = ['web', 'forensics', 'crypto', 'osint', 'network', 'pwn'];
-const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
+const DIFFICULTIES = ['warm_up', 'easy', 'medium', 'hard'];
 
 export default function SubmitForm({ onSubmitted }) {
   const [mode, setMode] = useState('cve');

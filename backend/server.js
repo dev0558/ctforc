@@ -11,6 +11,7 @@ import statsRoutes from './api/routes/stats.js';
 import categoriesRoutes from './api/routes/categories.js';
 import packagesRoutes from './api/routes/packages.js';
 import challengeFilesRoutes from './api/routes/challengeFiles.js';
+import batchReviewRoutes from './api/routes/batchReview.js';
 
 async function start() {
   // Initialize database
@@ -48,6 +49,7 @@ async function start() {
   app.use('/api/categories', categoriesRoutes);
   app.use('/api/packages', packagesRoutes);
   app.use('/api/challenge-files', challengeFilesRoutes);
+  app.use('/api/batch-review', batchReviewRoutes);
 
   app.listen(config.port, () => {
     console.log(`[Server] CTF Orchestrator running on port ${config.port}`);

@@ -12,9 +12,9 @@ You MUST respond with a single JSON object. No markdown, no backticks, no preamb
 
 3. **Category**: Use the category provided in the input. Must be one of: web, forensics, crypto, osint, network, pwn.
 
-4. **Difficulty**: Use the difficulty provided in the input but adjust if the idea clearly warrants a different level. Must be: easy, medium, hard.
+4. **Difficulty**: Use the difficulty provided in the input but adjust if the idea clearly warrants a different level. Must be: warm_up, easy, medium, hard. warm_up is for very simple introductory challenges.
 
-5. **Points**: Map to difficulty: easy=100-200, medium=200-300, hard=400-500. Must be one of: 100, 200, 300, 400, 500.
+5. **Points**: Must match difficulty exactly: warm_up=50, easy=150, medium=350, hard=700.
 
 6. **Tech Stack**: List specific technologies needed to build this challenge. Be concrete (e.g., ["Python", "Scapy", "Docker"] not just ["Python"]).
 
@@ -22,7 +22,7 @@ You MUST respond with a single JSON object. No markdown, no backticks, no preamb
 
 8. **Flag**: Format Exploit3rs{...} with lowercase, numbers, underscores only inside braces. Thematic to the challenge.
 
-9. **Honeypot Flag**: A plausible decoy in the same format.
+9. **Honeypot Flag**: If a custom honeypot flag is provided in the input, use it exactly. If honeypotFlag is null, do NOT generate one — set it to null. If no honeypot preference is specified, generate one automatically. A plausible decoy in the same format.
 
 10. **Anti-AI Countermeasures**: At least 3 specific to this challenge type. For non-web categories:
     - Forensics: require multi-file correlation, hide data in binary formats AI cannot parse, use encoding chains
@@ -45,12 +45,12 @@ Same schema as CVE mode:
   "challengeName": "string",
   "narrative": "string",
   "category": "web|forensics|crypto|osint|network|pwn",
-  "difficulty": "easy|medium|hard",
-  "points": 100|200|300|400|500,
+  "difficulty": "warm_up|easy|medium|hard",
+  "points": 50|150|350|700,
   "techStack": ["string"],
   "exploitPath": ["string"],
   "flag": "Exploit3rs{...}",
-  "honeypotFlag": "Exploit3rs{...}",
+  "honeypotFlag": "Exploit3rs{...}" or null,
   "antiAiCountermeasures": ["string"],
   "reviewerNote": "string",
   "estimatedBuildTimeMin": 15,

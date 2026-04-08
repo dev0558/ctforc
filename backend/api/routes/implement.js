@@ -11,18 +11,20 @@ const cveItemSchema = z.string().regex(/^CVE-\d{4}-\d{4,}$/, 'Invalid CVE ID for
 const ideaItemSchema = z.object({
   description: z.string().min(10, 'Description must be at least 10 characters'),
   category: z.enum(['web', 'forensics', 'crypto', 'osint', 'network', 'pwn']),
-  difficulty: z.enum(['easy', 'medium', 'hard', 'expert']),
+  difficulty: z.enum(['warm_up', 'easy', 'medium', 'hard']),
 });
 
 const implementSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('cve'),
     items: z.array(cveItemSchema).min(1).max(20),
-    force: z.boolean().optional(), // Allow forcing past duplicate warnings
+    force: z.boolean().optional(),
+    honeypotFlag: z.string().nullable().optional(),
   }),
   z.object({
     mode: z.literal('idea'),
     items: z.array(ideaItemSchema).min(1).max(20),
+    honeypotFlag: z.string().nullable().optional(),
   }),
 ]);
 

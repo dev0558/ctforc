@@ -6,13 +6,14 @@ export default {
   color: '#ffd93d',
   defaultTechStack: ['Python', 'PyCryptodome', 'SageMath'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Classical ciphers, base encoding, simple XOR' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'RSA with small primes, AES-ECB, hash collisions' },
-    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Elliptic curve attacks, padding oracle, custom crypto' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 10, description: 'Base64/ROT13, simple substitution' },
+    { level: 'easy', points: [150], estimatedMinutes: 20, description: 'Classical ciphers, base encoding, simple XOR' },
+    { level: 'medium', points: [350], estimatedMinutes: 45, description: 'RSA with small primes, AES-ECB, hash collisions' },
+    { level: 'hard', points: [700], estimatedMinutes: 90, description: 'Elliptic curve attacks, padding oracle, custom crypto' },
   ],
   artifactTypes: ['Encryption script', 'Ciphertext/encrypted file', 'Solver script', 'Math writeup'],
   outputFiles: ['encrypt.py', 'ciphertext.txt', 'public_key.pem', 'solve.py', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: false,
   formFields: [
     { name: 'cryptoType', label: 'Crypto Type', type: 'select', options: ['RSA', 'AES', 'XOR', 'Classical Cipher', 'Hash', 'Elliptic Curve', 'Diffie-Hellman', 'Custom Algorithm', 'Other'] },

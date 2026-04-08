@@ -56,6 +56,32 @@ export async function initDb() {
       file_manifest TEXT NOT NULL,
       token_usage INTEGER DEFAULT 0,
       generation_time_ms INTEGER DEFAULT 0,
+      anti_ai_manifest TEXT,
+      test_results TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS spec_versions (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES jobs(id),
+      revision INTEGER NOT NULL,
+      spec_json TEXT NOT NULL,
+      feedback TEXT,
+      token_usage INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS build_versions (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES jobs(id),
+      revision INTEGER NOT NULL,
+      file_manifest TEXT NOT NULL,
+      feedback TEXT,
+      token_usage INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -231,12 +257,14 @@ export function getSpec(jobId) {
 
 // --- Challenges ---
 
-export function createChallenge({ jobId, fileManifest, tokenUsage = 0, generationTimeMs = 0 }) {
+export function createChallenge({ jobId, fileManifest, tokenUsage = 0, generationTimeMs = 0, antiAiManifest = null, testResults = null }) {
   const id = uuidv4();
   const jsonStr = typeof fileManifest === 'string' ? fileManifest : JSON.stringify(fileManifest);
+  const antiAiStr = antiAiManifest ? JSON.stringify(antiAiManifest) : null;
+  const testStr = testResults ? JSON.stringify(testResults) : null;
   getDb().run(
-    'INSERT INTO challenges (id, job_id, file_manifest, token_usage, generation_time_ms) VALUES (?, ?, ?, ?, ?)',
-    [id, jobId, jsonStr, tokenUsage, generationTimeMs]
+    'INSERT INTO challenges (id, job_id, file_manifest, token_usage, generation_time_ms, anti_ai_manifest, test_results) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [id, jobId, jsonStr, tokenUsage, generationTimeMs, antiAiStr, testStr]
   );
   return { id, job_id: jobId };
 }
@@ -248,6 +276,12 @@ export function getChallenge(jobId) {
   stmt.free();
   if (row && row.file_manifest) {
     try { row.file_manifest = JSON.parse(row.file_manifest); } catch {}
+  }
+  if (row && row.anti_ai_manifest) {
+    try { row.anti_ai_manifest = JSON.parse(row.anti_ai_manifest); } catch {}
+  }
+  if (row && row.test_results) {
+    try { row.test_results = JSON.parse(row.test_results); } catch {}
   }
   return row;
 }
@@ -273,6 +307,54 @@ export function getReviews(jobId) {
     if (row.edited_data) {
       try { row.edited_data = JSON.parse(row.edited_data); } catch {}
     }
+    rows.push(row);
+  }
+  stmt.free();
+  return rows;
+}
+
+// --- Versioning ---
+
+export function createSpecVersion({ jobId, revision, specJson, feedback = null, tokenUsage = 0 }) {
+  const id = uuidv4();
+  const jsonStr = typeof specJson === 'string' ? specJson : JSON.stringify(specJson);
+  getDb().run(
+    'INSERT INTO spec_versions (id, job_id, revision, spec_json, feedback, token_usage) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, jobId, revision, jsonStr, feedback, tokenUsage]
+  );
+  return { id, job_id: jobId, revision };
+}
+
+export function createBuildVersion({ jobId, revision, fileManifest, feedback = null, tokenUsage = 0 }) {
+  const id = uuidv4();
+  const jsonStr = typeof fileManifest === 'string' ? fileManifest : JSON.stringify(fileManifest);
+  getDb().run(
+    'INSERT INTO build_versions (id, job_id, revision, file_manifest, feedback, token_usage) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, jobId, revision, jsonStr, feedback, tokenUsage]
+  );
+  return { id, job_id: jobId, revision };
+}
+
+export function getSpecVersions(jobId) {
+  const stmt = getDb().prepare('SELECT * FROM spec_versions WHERE job_id = ? ORDER BY revision ASC');
+  stmt.bind([jobId]);
+  const rows = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    if (row.spec_json) { try { row.spec_json = JSON.parse(row.spec_json); } catch {} }
+    rows.push(row);
+  }
+  stmt.free();
+  return rows;
+}
+
+export function getBuildVersions(jobId) {
+  const stmt = getDb().prepare('SELECT * FROM build_versions WHERE job_id = ? ORDER BY revision ASC');
+  stmt.bind([jobId]);
+  const rows = [];
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    if (row.file_manifest) { try { row.file_manifest = JSON.parse(row.file_manifest); } catch {} }
     rows.push(row);
   }
   stmt.free();

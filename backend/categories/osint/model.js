@@ -6,13 +6,14 @@ export default {
   color: '#4ade80',
   defaultTechStack: ['Python', 'ExifTool', 'HTML/CSS'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Single source, EXIF data, basic search' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Cross-platform correlation, hidden metadata' },
-    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Multi-step investigation, geolocation chains' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 10, description: 'Simple metadata check, single source' },
+    { level: 'easy', points: [150], estimatedMinutes: 20, description: 'Single source, EXIF data, basic search' },
+    { level: 'medium', points: [350], estimatedMinutes: 45, description: 'Cross-platform correlation, hidden metadata' },
+    { level: 'hard', points: [700], estimatedMinutes: 90, description: 'Multi-step investigation, geolocation chains' },
   ],
   artifactTypes: ['Profile setup script', 'OSINT artifacts', 'Image set', 'Writeup'],
   outputFiles: ['setup_profiles.py', 'generate_artifacts.py', 'images/', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: false,
   formFields: [
     { name: 'osintType', label: 'Investigation Type', type: 'select', options: ['Social Media', 'Geolocation', 'Image Analysis', 'Domain/DNS', 'Email Tracing', 'Username Search', 'Document Metadata', 'Other'] },

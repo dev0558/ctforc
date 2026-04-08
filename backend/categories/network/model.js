@@ -6,13 +6,14 @@ export default {
   color: '#57cbff',
   defaultTechStack: ['Python', 'Scapy', 'Wireshark', 'Docker'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Basic packet analysis, plaintext credentials' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Protocol-specific exploits, encrypted traffic' },
-    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Custom protocols, covert channels, traffic manipulation' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 10, description: 'Follow the stream, plaintext flag' },
+    { level: 'easy', points: [150], estimatedMinutes: 20, description: 'Basic packet analysis, plaintext credentials' },
+    { level: 'medium', points: [350], estimatedMinutes: 45, description: 'Protocol-specific exploits, encrypted traffic' },
+    { level: 'hard', points: [700], estimatedMinutes: 90, description: 'Custom protocols, covert channels, traffic manipulation' },
   ],
   artifactTypes: ['PCAP generator', 'Network capture', 'Topology diagram', 'Solver script', 'Writeup'],
   outputFiles: ['generate_pcap.py', 'capture.pcap', 'network_topology.txt', 'solve.py', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: true,
   formFields: [
     { name: 'protocol', label: 'Target Protocol', type: 'select', options: ['HTTP/HTTPS', 'DNS', 'TCP/UDP', 'FTP', 'SMB', 'SSH', 'ICMP', 'Custom Protocol', 'Other'] },

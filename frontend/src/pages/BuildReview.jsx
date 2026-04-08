@@ -352,10 +352,97 @@ export default function BuildReview() {
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Real Flag</div>
                 <div className="mono" style={{ fontSize: '12px', color: 'var(--accent-teal)', wordBreak: 'break-all' }}>{specJson.flag}</div>
               </div>
-              {specJson.honeypotFlag && (
+              {specJson.honeypotFlag ? (
                 <div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Honeypot (Decoy)</div>
                   <div className="mono" style={{ fontSize: '12px', color: 'var(--accent-coral)', wordBreak: 'break-all' }}>{specJson.honeypotFlag}</div>
+                </div>
+              ) : (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Honeypot: disabled</div>
+              )}
+            </div>
+          )}
+
+          {/* Test Results */}
+          {challenge?.test_results && (
+            <div className="card" style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                Test Results
+              </div>
+              <div style={{
+                padding: '8px',
+                borderRadius: '4px',
+                marginBottom: '8px',
+                background: challenge.test_results.overallPass ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255, 107, 107, 0.1)',
+                color: challenge.test_results.overallPass ? 'var(--accent-green)' : 'var(--accent-coral)',
+                fontWeight: 600,
+                fontSize: '13px',
+              }}>
+                {challenge.test_results.overallPass ? 'ALL TESTS PASSED' : 'TEST FAILED'}
+              </div>
+              {challenge.test_results.dockerBuild && (
+                <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                  <span style={{ color: challenge.test_results.dockerBuild.success ? 'var(--accent-green)' : 'var(--accent-coral)' }}>
+                    {challenge.test_results.dockerBuild.success ? '\u2713' : '\u2717'}
+                  </span>{' '}
+                  Docker Build {challenge.test_results.dockerBuild.duration && `(${challenge.test_results.dockerBuild.duration})`}
+                </div>
+              )}
+              {challenge.test_results.containerHealth && (
+                <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                  <span style={{ color: challenge.test_results.containerHealth.success ? 'var(--accent-green)' : 'var(--accent-coral)' }}>
+                    {challenge.test_results.containerHealth.success ? '\u2713' : '\u2717'}
+                  </span>{' '}
+                  Health Check (HTTP {challenge.test_results.containerHealth.statusCode})
+                </div>
+              )}
+              {challenge.test_results.solveScript && (
+                <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                  <span style={{ color: challenge.test_results.solveScript.success ? 'var(--accent-green)' : 'var(--accent-coral)' }}>
+                    {challenge.test_results.solveScript.success ? '\u2713' : '\u2717'}
+                  </span>{' '}
+                  Solve Script
+                </div>
+              )}
+              <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                <span style={{ color: challenge.test_results.flagVerification?.realFlagFound ? 'var(--accent-green)' : 'var(--accent-coral)' }}>
+                  {challenge.test_results.flagVerification?.realFlagFound ? '\u2713' : '\u2717'}
+                </span>{' '}
+                Flag Verified
+              </div>
+              {challenge.test_results.errors?.length > 0 && (
+                <div style={{ fontSize: '11px', color: 'var(--accent-coral)', marginTop: '6px' }}>
+                  {challenge.test_results.errors.join('; ')}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Anti-AI Manifest */}
+          {challenge?.anti_ai_manifest && (
+            <div className="card" style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                Anti-AI Injections ({challenge.anti_ai_manifest.totalInjections})
+              </div>
+              {!challenge.anti_ai_manifest.honeypotEnabled && (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: '6px' }}>
+                  Honeypot disabled — prompt misdirection only
+                </div>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+                {(challenge.anti_ai_manifest.coverage || []).map((t, i) => (
+                  <span key={i} className="tag" style={{ fontSize: '10px' }}>{t}</span>
+                ))}
+              </div>
+              {(challenge.anti_ai_manifest.injections || []).slice(0, 8).map((inj, i) => (
+                <div key={i} style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>
+                  <span className="mono" style={{ color: 'var(--accent-purple)' }}>{inj.type}</span>
+                  {' — '}{inj.file} ({inj.location})
+                </div>
+              ))}
+              {challenge.anti_ai_manifest.injections?.length > 8 && (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  +{challenge.anti_ai_manifest.injections.length - 8} more...
                 </div>
               )}
             </div>

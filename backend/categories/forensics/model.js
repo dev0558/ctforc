@@ -6,13 +6,14 @@ export default {
   color: '#c084fc',
   defaultTechStack: ['Python', 'Wireshark', 'Scapy', 'Volatility'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 20, description: 'Single file analysis, basic encoding' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 45, description: 'Multi-file correlation, steganography' },
-    { level: 'hard', points: [500], estimatedMinutes: 90, description: 'Memory dumps, custom protocols, multi-layer encoding' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 10, description: 'Simple file inspection, single encoding' },
+    { level: 'easy', points: [150], estimatedMinutes: 20, description: 'Single file analysis, basic encoding' },
+    { level: 'medium', points: [350], estimatedMinutes: 45, description: 'Multi-file correlation, steganography' },
+    { level: 'hard', points: [700], estimatedMinutes: 90, description: 'Memory dumps, custom protocols, multi-layer encoding' },
   ],
   artifactTypes: ['Artifact generator', 'Evidence files', 'Analysis hints', 'Writeup'],
   outputFiles: ['generate_artifacts.py', 'analysis_hints.txt', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: false,
   formFields: [
     { name: 'artifactType', label: 'Primary Artifact', type: 'select', options: ['PCAP', 'Memory Dump', 'Disk Image', 'Log Files', 'Image (Stego)', 'PDF', 'Network Logs', 'Other'] },

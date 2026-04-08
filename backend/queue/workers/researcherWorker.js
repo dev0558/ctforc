@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getConnection } from '../index.js';
-import { getJob, getSpec, updateJobStatus, updateSpec, createSpec } from '../../db/client.js';
+import { getJob, getSpec, updateJobStatus, updateSpec, createSpec, createSpecVersion } from '../../db/client.js';
 import { researchCVE, researchIdea } from '../../researcher/index.js';
 import { checkDuplicate, checkCveDuplicate } from '../../researcher/duplicateChecker.js';
 import { getAllSpecs, findJobByCveId } from '../../db/client.js';
@@ -105,6 +105,9 @@ async function handleResearch(jobId) {
       generationTimeMs: result.durationMs,
     });
 
+    // Save version 1
+    createSpecVersion({ jobId, revision: 1, specJson: result.spec, tokenUsage: result.tokenUsage });
+
     updateJobStatus(jobId, 'pending_spec_review');
 
     console.log(`[Researcher Worker] ${jobId} complete: "${result.spec.challengeName}" | ${result.tokenUsage} tokens`);
@@ -179,6 +182,8 @@ async function handleReworkSpec(jobId, feedback) {
 
     // Update existing spec with revised version
     updateSpec(jobId, result, tokenUsage, durationMs);
+    // Save version history
+    createSpecVersion({ jobId, revision: job.spec_revision || 2, specJson: result, feedback, tokenUsage });
     updateJobStatus(jobId, 'pending_spec_review');
 
     console.log(`[Researcher Worker] ${jobId} spec rework complete (rev ${job.spec_revision}) | ${tokenUsage} tokens`);

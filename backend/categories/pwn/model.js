@@ -6,13 +6,14 @@ export default {
   color: '#ff6b6b',
   defaultTechStack: ['C', 'GCC', 'Python', 'pwntools', 'Docker'],
   difficulties: [
-    { level: 'easy', points: [100, 200], estimatedMinutes: 30, description: 'Basic buffer overflow, no protections' },
-    { level: 'medium', points: [300, 400], estimatedMinutes: 60, description: 'Stack canary bypass, ROP, format string' },
-    { level: 'hard', points: [500], estimatedMinutes: 120, description: 'Heap exploitation, ASLR+PIE bypass, kernel pwn' },
+    { level: 'warm_up', points: [50], estimatedMinutes: 15, description: 'Simple overflow, flag in stack' },
+    { level: 'easy', points: [150], estimatedMinutes: 30, description: 'Basic buffer overflow, no protections' },
+    { level: 'medium', points: [350], estimatedMinutes: 60, description: 'Stack canary bypass, ROP, format string' },
+    { level: 'hard', points: [700], estimatedMinutes: 120, description: 'Heap exploitation, ASLR+PIE bypass, kernel pwn' },
   ],
   artifactTypes: ['Vulnerable binary source', 'Makefile', 'Dockerfile', 'Exploit script', 'Writeup'],
   outputFiles: ['vuln.c', 'Makefile', 'Dockerfile', 'exploit.py', 'writeup.md'],
-  difficultyWeights: { easy: 100, medium: 300, hard: 500 },
+  difficultyWeights: { warm_up: 50, easy: 150, medium: 350, hard: 700 },
   supportsDocker: true,
   formFields: [
     { name: 'vulnType', label: 'Vulnerability Type', type: 'select', options: ['Buffer Overflow', 'Format String', 'Heap Overflow', 'Use-After-Free', 'Integer Overflow', 'Race Condition', 'ROP', 'Shellcoding', 'Other'] },

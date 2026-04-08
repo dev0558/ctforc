@@ -3,10 +3,12 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getConnection } from '../index.js';
-import { getJob, getSpec, getChallenge, updateJobStatus, updateChallenge, createChallenge } from '../../db/client.js';
+import { getJob, getSpec, getChallenge, updateJobStatus, updateChallenge, createChallenge, createBuildVersion } from '../../db/client.js';
 import { getCategory } from '../../categories/index.js';
 import { buildChallenge, saveFiles } from '../../categories/baseBuilder.js';
 import { generateJSON } from '../../agents/claudeClient.js';
+import { injectCountermeasures } from '../../antiAi/engine.js';
+import { testChallenge } from '../../tester/index.js';
 import config from '../../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -83,12 +85,40 @@ async function handleBuild(jobId) {
   try {
     const result = await buildChallenge(approvedSpec, categoryId);
 
-    saveFiles(jobId, result.files);
+    // Run Anti-AI countermeasure engine
+    const realFlag = approvedSpec.flag || 'Exploit3rs{default_flag}';
+    const honeypotFlag = approvedSpec.honeypotFlag || null;
+    let finalFiles = result.files;
+    let antiAiManifest = null;
 
-    const fileManifest = result.fileList.map((filePath) => ({
+    try {
+      const antiAiResult = injectCountermeasures(result.files, honeypotFlag, realFlag);
+      finalFiles = antiAiResult.processedFiles;
+      antiAiManifest = antiAiResult.manifest;
+      console.log(`[Builder Worker] ${jobId} anti-AI: ${antiAiManifest.totalInjections} injections (honeypot: ${honeypotFlag ? 'enabled' : 'disabled'})`);
+    } catch (err) {
+      console.warn(`[Builder Worker] ${jobId} anti-AI engine failed (non-fatal):`, err.message);
+    }
+
+    // Save files to storage on disk
+    saveFiles(jobId, finalFiles);
+
+    // Run challenge tester
+    let testResults = null;
+    try {
+      testResults = await testChallenge(jobId, categoryId, finalFiles, realFlag, config.storagePath);
+      console.log(`[Builder Worker] ${jobId} test: ${testResults.overallPass ? 'PASS' : 'FAIL'} (${testResults.duration}ms)`);
+    } catch (err) {
+      console.warn(`[Builder Worker] ${jobId} tester failed (non-fatal):`, err.message);
+      testResults = { tested: false, errors: [err.message], overallPass: false };
+    }
+
+    // Convert files object to file_manifest array format for DB
+    const fileList = Object.keys(finalFiles);
+    const fileManifest = fileList.map((filePath) => ({
       path: filePath,
       language: detectLanguage(filePath),
-      content: result.files[filePath],
+      content: finalFiles[filePath],
     }));
 
     createChallenge({
@@ -96,12 +126,17 @@ async function handleBuild(jobId) {
       fileManifest,
       tokenUsage: result.tokenUsage,
       generationTimeMs: result.durationMs,
+      antiAiManifest,
+      testResults,
     });
+
+    // Save build version 1
+    createBuildVersion({ jobId, revision: 1, fileManifest, tokenUsage: result.tokenUsage });
 
     updateJobStatus(jobId, 'pending_build_review');
 
-    console.log(`[Builder Worker] ${jobId} complete: ${result.fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
-    return { jobId, status: 'pending_build_review', filesCount: result.fileList.length };
+    console.log(`[Builder Worker] ${jobId} complete: ${fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
+    return { jobId, status: 'pending_build_review', filesCount: fileList.length };
   } catch (err) {
     console.error(`[Builder Worker] ${jobId} build error:`, err.message);
     updateJobStatus(jobId, 'failed', `Build failed: ${err.message}`);
@@ -202,6 +237,7 @@ async function handleReworkBuild(jobId, feedback) {
     }));
 
     updateChallenge(jobId, fileManifest, tokenUsage, durationMs);
+    createBuildVersion({ jobId, revision: job.build_revision || 2, fileManifest, feedback, tokenUsage });
     updateJobStatus(jobId, 'pending_build_review');
 
     console.log(`[Builder Worker] ${jobId} build rework complete (rev ${job.build_revision}) | ${fileList.length} files | ${tokenUsage} tokens`);

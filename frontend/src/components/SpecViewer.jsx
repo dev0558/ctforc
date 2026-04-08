@@ -1,3 +1,11 @@
+const POINT_MAP = { warm_up: 50, easy: 150, medium: 350, hard: 700 };
+const DIFF_COLORS = {
+  warm_up: '#94a3b8',
+  easy: 'var(--accent-teal)',
+  medium: 'var(--accent-amber)',
+  hard: 'var(--accent-coral)',
+};
+
 export default function SpecViewer({ spec }) {
   if (!spec) return <div className="text-muted">No spec data available</div>;
 
@@ -32,11 +40,27 @@ export default function SpecViewer({ spec }) {
         </div>
         <div className="spec-field">
           <div className="field-label">Difficulty</div>
-          <div className="field-value mono" style={{ textTransform: 'capitalize' }}>{data.difficulty || '-'}</div>
+          <div className="field-value">
+            <span style={{
+              display: 'inline-block',
+              padding: '2px 10px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono)',
+              background: `${DIFF_COLORS[data.difficulty] || 'var(--text-muted)'}22`,
+              color: DIFF_COLORS[data.difficulty] || 'var(--text-muted)',
+              textTransform: 'capitalize',
+            }}>
+              {(data.difficulty || '-').replace('_', ' ')}
+            </span>
+          </div>
         </div>
         <div className="spec-field">
           <div className="field-label">Points</div>
-          <div className="field-value mono">{data.points || '-'}</div>
+          <div className="field-value mono" style={{ fontWeight: 700, color: DIFF_COLORS[data.difficulty] || 'var(--text-primary)' }}>
+            {data.points || POINT_MAP[data.difficulty] || '-'}
+          </div>
         </div>
       </div>
 
@@ -87,14 +111,16 @@ export default function SpecViewer({ spec }) {
         </div>
       </div>
 
-      {honeypotFlag && (
-        <div className="spec-field">
-          <div className="field-label">Honeypot Flag (Decoy)</div>
+      <div className="spec-field">
+        <div className="field-label">Honeypot Flag (Decoy)</div>
+        {honeypotFlag ? (
           <div className="tag-list">
             <span className="tag" style={{ color: 'var(--accent-amber)' }}>{honeypotFlag}</span>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="field-value" style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '13px' }}>Disabled</div>
+        )}
+      </div>
 
       {data.hints && data.hints.length > 0 && (
         <div className="spec-field">

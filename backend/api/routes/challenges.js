@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { join } from 'path';
 import { getJob, getSpec, getChallenge, updateJobStatus, updateJob, createReview } from '../../db/client.js';
 import { addReworkBuildJob } from '../../queue/index.js';
+import { createPackages } from '../../packager/index.js';
+import config from '../../config.js';
 
 const router = Router();
 
@@ -52,6 +55,22 @@ router.post('/:jobId/review', async (req, res) => {
 
     if (parsed.action === 'approve') {
       updateJobStatus(job.id, 'ready');
+
+      // Trigger package creation in the background
+      const specRow = getSpec(job.id);
+      const specJson = specRow?.spec_json ? (typeof specRow.spec_json === 'string' ? JSON.parse(specRow.spec_json) : specRow.spec_json) : {};
+      const challengeRow = getChallenge(job.id);
+      const challengeDir = join(config.storagePath, 'challenges', job.id);
+      const testResults = challengeRow?.test_results || null;
+
+      createPackages(job.id, specJson, challengeDir, testResults, config.storagePath)
+        .then((pkgResult) => {
+          console.log(`[Challenges] Packages created for ${job.id}: specialist=${pkgResult.specialistSize}B, participant=${pkgResult.participantSize}B`);
+        })
+        .catch((err) => {
+          console.warn(`[Challenges] Package creation failed for ${job.id} (non-fatal):`, err.message);
+        });
+
       res.json({ status: 'ready', message: 'Challenge approved and ready' });
 
     } else if (parsed.action === 'reject_final') {
