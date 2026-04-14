@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getJob, getSpec, updateJobStatus, updateJob, updateSpec, createReview, createSpec } from '../../db/client.js';
-import { addBuildJob, addReworkSpecJob } from '../../queue/index.js';
+import { addDeveloperJob, addReworkSpecJob } from '../../queue/index.js';
 
 const router = Router();
 
@@ -65,7 +65,7 @@ router.post('/:jobId/review', async (req, res) => {
       updateJobStatus(job.id, 'spec_approved');
 
       try {
-        await addBuildJob(job.id);
+        await addDeveloperJob(job.id);
       } catch (err) {
         console.error(`[Specs] Failed to enqueue build for ${job.id}:`, err.message);
       }

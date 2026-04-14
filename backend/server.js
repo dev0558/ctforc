@@ -21,10 +21,12 @@ async function start() {
   // Start queue workers (wrapped in try/catch for Redis unavailability)
   try {
     const { startResearcherWorker } = await import('./queue/workers/researcherWorker.js');
+    const { startArchitectWorker } = await import('./queue/workers/architectWorker.js');
     const { startBuilderWorker } = await import('./queue/workers/builderWorker.js');
     startResearcherWorker();
+    startArchitectWorker();
     startBuilderWorker();
-    console.log('[Queue] Workers started');
+    console.log('[Queue] 3-stage pipeline workers started (Researcher → Architect → Developer)');
   } catch (err) {
     console.warn('[Queue] Failed to start workers (is Redis running?):', err.message);
     console.warn('[Queue] The API will work but job processing will be unavailable');

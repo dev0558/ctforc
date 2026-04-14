@@ -55,8 +55,8 @@ export default function JobDetail() {
   if (!job) return <div className="text-muted">Job not found</div>;
 
   const STATUS_ORDER = [
-    'queued', 'researching', 'pending_spec_review', 'spec_approved',
-    'building', 'pending_build_review', 'ready'
+    'queued', 'researching', 'architecting', 'pending_spec_review', 'spec_approved',
+    'developing', 'pending_build_review', 'ready'
   ];
   const currentIdx = STATUS_ORDER.indexOf(job.status);
 
@@ -161,7 +161,54 @@ export default function JobDetail() {
             </div>
           </div>
 
-          {/* Spec */}
+          {/* Research Analysis (Stage 1) */}
+          {job.analysis && job.analysis.analysis_json && job.analysis.analysis_json.type !== 'idea' && (
+            <div className="card mb-24">
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent-purple, #c084fc)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px' }}>
+                Researcher Analysis
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div className="spec-field">
+                  <div className="field-label">CVE</div>
+                  <div className="field-value mono">{job.analysis.analysis_json.cveId || '-'}</div>
+                </div>
+                <div className="spec-field">
+                  <div className="field-label">Vulnerability Type</div>
+                  <div className="field-value">{job.analysis.analysis_json.vulnerability?.type || '-'}</div>
+                </div>
+              </div>
+              {job.analysis.analysis_json.affectedTechnology && (
+                <div className="spec-field" style={{ marginBottom: '12px' }}>
+                  <div className="field-label">Immutable Technology</div>
+                  <div className="tag-list">
+                    {(job.analysis.analysis_json.affectedTechnology.techStack || []).map((t, i) => (
+                      <span key={i} className="tag" style={{ color: 'var(--accent-purple, #c084fc)' }}>{t}</span>
+                    ))}
+                    {job.analysis.analysis_json.affectedTechnology.language && (
+                      <span className="tag" style={{ color: 'var(--accent-amber)' }}>{job.analysis.analysis_json.affectedTechnology.language}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {job.analysis.analysis_json.exploitation?.steps && (
+                <div className="spec-field">
+                  <div className="field-label">Exploitation Steps</div>
+                  <ol style={{ paddingLeft: '20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {job.analysis.analysis_json.exploitation.steps.map((step, i) => (
+                      <li key={i} style={{ marginBottom: '4px' }}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {job.analysis.token_usage > 0 && (
+                <div className="mono" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  {job.analysis.token_usage} tokens | {job.analysis.generation_time_ms}ms
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Spec (Stage 2: Architect) */}
           {job.spec && (
             <div className="card mb-24">
               <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px' }}>

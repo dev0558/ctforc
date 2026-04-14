@@ -7,10 +7,11 @@ const STATUSES = [
   { value: '', label: 'All Statuses' },
   { value: 'queued', label: 'Queued' },
   { value: 'researching', label: 'Researching' },
+  { value: 'architecting', label: 'Architecting' },
   { value: 'pending_spec_review', label: 'Pending Spec Review' },
   { value: 'reworking_spec', label: 'Reworking Spec' },
   { value: 'spec_approved', label: 'Spec Approved' },
-  { value: 'building', label: 'Building' },
+  { value: 'developing', label: 'Developing' },
   { value: 'pending_build_review', label: 'Pending Build Review' },
   { value: 'reworking_build', label: 'Reworking Build' },
   { value: 'ready', label: 'Ready' },
@@ -86,7 +87,7 @@ export default function Queue() {
     return () => clearInterval(interval);
   }, [fetchJobs]);
 
-  const activeCount = jobs.filter((j) => ['queued', 'researching', 'building'].includes(j.status)).length;
+  const activeCount = jobs.filter((j) => ['queued', 'researching', 'architecting', 'developing'].includes(j.status)).length;
   const reviewCount = jobs.filter((j) => ['pending_spec_review', 'pending_build_review'].includes(j.status)).length;
 
   const reviewableJobs = jobs.filter((j) => BATCH_REVIEWABLE.includes(j.status));

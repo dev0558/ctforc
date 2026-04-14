@@ -2,12 +2,12 @@ import { Worker } from 'bullmq';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { getConnection } from '../index.js';
-import { getJob, getSpec, updateJobStatus, updateSpec, createSpec, createSpecVersion } from '../../db/client.js';
-import { researchCVE, researchIdea } from '../../researcher/index.js';
-import { checkDuplicate, checkCveDuplicate } from '../../researcher/duplicateChecker.js';
-import { getAllSpecs, findJobByCveId } from '../../db/client.js';
-import { generateJSON } from '../../agents/claudeClient.js';
+import { getConnection, addArchitectJob } from '../index.js';
+import { getJob, updateJobStatus, updateJob, createAnalysis } from '../../db/client.js';
+import { fetchCVE } from '../../researcher/nvdClient.js';
+import { categorizeReferences } from '../../researcher/refCollector.js';
+import { enrichContext } from '../../researcher/contextEnricher.js';
+import { runAgent } from '../../agents/agentRunner.js';
 import config from '../../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,12 +19,7 @@ export function startResearcherWorker() {
   worker = new Worker(
     'research-queue',
     async (bullJob) => {
-      const { jobId, type, feedback } = bullJob.data;
-
-      if (type === 'rework-spec') {
-        return await handleReworkSpec(jobId, feedback);
-      }
-
+      const { jobId } = bullJob.data;
       return await handleResearch(jobId);
     },
     {
@@ -34,86 +29,90 @@ export function startResearcherWorker() {
   );
 
   worker.on('completed', (bullJob, result) => {
-    console.log(`[Researcher Worker] Job ${bullJob.id} completed successfully`);
+    console.log(`[Researcher Agent] Job ${bullJob.id} completed`);
   });
 
   worker.on('failed', (bullJob, err) => {
-    console.error(`[Researcher Worker] Job ${bullJob?.id} failed:`, err.message);
+    console.error(`[Researcher Agent] Job ${bullJob?.id} failed:`, err.message);
   });
 
-  console.log('[Researcher Worker] Started (Phase 2: real Claude API + rework support)');
+  console.log('[Researcher Agent] Started (3-stage pipeline: research → architect → developer)');
   return worker;
 }
 
 /**
- * Handle normal research jobs (CVE or idea).
+ * Stage 1: Researcher Agent
+ *
+ * For CVE mode:
+ *   1. Fetch NVD data (no LLM)
+ *   2. Enrich context (CWE, MITRE, tech stack)
+ *   3. Call Claude agent to produce technical analysis
+ *   4. Lock immutable technology from NVD data
+ *   5. Save analysis, hand off to Architect
+ *
+ * For idea mode:
+ *   Skip to Architect directly (no CVE analysis needed)
  */
 async function handleResearch(jobId) {
-  console.log(`[Researcher Worker] Processing job ${jobId}`);
+  console.log(`[Researcher Agent] Processing job ${jobId}`);
 
   const job = getJob(jobId);
   if (!job) {
-    console.error(`[Researcher Worker] Job ${jobId} not found`);
-    return;
+    throw new Error(`Job ${jobId} not found`);
   }
 
   const label = job.cve_id || `idea: "${(job.idea_text || '').substring(0, 40)}"`;
-  console.log(`[Researcher Worker] ${jobId} | ${label}`);
+  console.log(`[Researcher Agent] ${jobId} | ${label}`);
 
   updateJobStatus(jobId, 'researching');
 
   try {
-    let result;
-
     if (job.cve_id) {
-      result = await researchCVE(job.cve_id);
-    } else if (job.idea_text) {
-      result = await researchIdea(
-        job.idea_text,
-        job.category || 'web',
-        job.difficulty || 'medium'
-      );
+      // CVE mode: full research pipeline
+      const analysis = await researchCVE(jobId, job.cve_id);
+
+      // Lock immutable technology from NVD-detected tech stack
+      const immutableTech = analysis.affectedTechnology || {};
+      updateJob(jobId, {
+        immutable_tech: JSON.stringify(immutableTech),
+        category: analysis.ctfRelevance?.suggestedCategory || job.category || 'web',
+      });
+
+      // Save analysis to DB
+      createAnalysis({
+        jobId,
+        analysisJson: analysis,
+        tokenUsage: analysis._tokenUsage || 0,
+        generationTimeMs: analysis._durationMs || 0,
+      });
+      // Clean internal fields
+      delete analysis._tokenUsage;
+      delete analysis._durationMs;
+
+      console.log(`[Researcher Agent] ${jobId} analysis saved, handing off to Architect`);
     } else {
-      throw new Error(`Invalid job data: no cve_id or idea_text`);
+      // Idea mode: no CVE analysis — save a minimal analysis stub
+      createAnalysis({
+        jobId,
+        analysisJson: {
+          type: 'idea',
+          ideaText: job.idea_text,
+          category: job.category,
+          difficulty: job.difficulty,
+        },
+        tokenUsage: 0,
+        generationTimeMs: 0,
+      });
+      console.log(`[Researcher Agent] ${jobId} idea mode, skipping CVE analysis`);
     }
 
-    // Run duplicate check after spec generation
-    const dupResult = checkDuplicate(result.spec, () => getAllSpecs());
+    // Hand off to Architect agent
+    updateJobStatus(jobId, 'architecting');
+    await addArchitectJob(jobId);
 
-    if (dupResult.isDuplicate) {
-      console.warn(`[Researcher Worker] ${jobId} DUPLICATE detected (score: ${dupResult.highestScore})`);
-      // Still save the spec but attach duplicate warning
-      result.spec.duplicateWarning = {
-        isDuplicate: true,
-        highestScore: dupResult.highestScore,
-        similarChallenges: dupResult.similarChallenges,
-      };
-    } else if (dupResult.isWarning) {
-      console.log(`[Researcher Worker] ${jobId} similar challenge found (score: ${dupResult.highestScore})`);
-      result.spec.duplicateWarning = {
-        isDuplicate: false,
-        highestScore: dupResult.highestScore,
-        similarChallenges: dupResult.similarChallenges,
-      };
-    }
-
-    // Save spec to database
-    createSpec({
-      jobId,
-      specJson: result.spec,
-      tokenUsage: result.tokenUsage,
-      generationTimeMs: result.durationMs,
-    });
-
-    // Save version 1
-    createSpecVersion({ jobId, revision: 1, specJson: result.spec, tokenUsage: result.tokenUsage });
-
-    updateJobStatus(jobId, 'pending_spec_review');
-
-    console.log(`[Researcher Worker] ${jobId} complete: "${result.spec.challengeName}" | ${result.tokenUsage} tokens`);
-    return { jobId, status: 'pending_spec_review', challengeName: result.spec.challengeName };
+    return { jobId, status: 'architecting' };
   } catch (err) {
-    console.error(`[Researcher Worker] ${jobId} error:`, err.message);
+    console.error(`[Researcher Agent] ${jobId} error:`, err.message);
 
     const currentJob = getJob(jobId);
     const retryCount = (currentJob?.retry_count || 0) + 1;
@@ -133,66 +132,95 @@ async function handleResearch(jobId) {
 }
 
 /**
- * Handle spec rework jobs — load rejected spec + feedback, call Claude to revise.
+ * CVE Research: fetch NVD data, enrich, then call Claude agent for deep analysis.
  */
-async function handleReworkSpec(jobId, feedback) {
-  console.log(`[Researcher Worker] Reworking spec for job ${jobId}`);
+async function researchCVE(jobId, cveId) {
+  console.log(`[Researcher Agent] Fetching NVD data for ${cveId}`);
 
-  const job = getJob(jobId);
-  if (!job) {
-    throw new Error(`Job ${jobId} not found`);
+  // Phase 1: Data collection (no LLM)
+  const nvdData = await fetchCVE(cveId);
+  console.log(`[Researcher Agent] NVD data: CVSS ${nvdData.cvss.score}, ${nvdData.cwes.length} CWEs, ${nvdData.references.length} refs`);
+
+  const categorizedRefs = categorizeReferences(nvdData.references);
+  console.log(`[Researcher Agent] Refs: ${categorizedRefs.pocs.length} PoCs, ${categorizedRefs.advisories.length} advisories`);
+
+  const enrichedContext = enrichContext(nvdData, categorizedRefs);
+  console.log(`[Researcher Agent] Enriched: category=${enrichedContext.detectedCategory}, tech=[${enrichedContext.techStack.join(',')}]`);
+
+  // Phase 2: Claude agent produces technical analysis
+  const systemPrompt = readFileSync(resolve(PROMPTS_DIR, 'researcher-analysis.md'), 'utf-8');
+
+  const userPrompt = buildAnalysisPrompt(enrichedContext);
+
+  const { result, tokenUsage, durationMs } = await runAgent({
+    agentName: 'Researcher',
+    systemPrompt,
+    userPrompt,
+    maxTokens: 8192,
+    jsonOutput: true,
+  });
+
+  // Inject enriched context data that the agent might have missed
+  result._tokenUsage = tokenUsage;
+  result._durationMs = durationMs;
+
+  // Ensure technology data from NVD is preserved (immutable)
+  if (!result.affectedTechnology) {
+    result.affectedTechnology = {};
+  }
+  result.affectedTechnology.techStack = enrichedContext.techStack;
+  result.affectedTechnology.detectedFromNVD = true;
+
+  return result;
+}
+
+function buildAnalysisPrompt(ctx) {
+  const refSummary = [];
+  if (ctx.references.pocs.length > 0) {
+    refSummary.push(`Public PoCs: ${ctx.references.pocs.map((r) => r.url).join(', ')}`);
+  }
+  if (ctx.references.advisories.length > 0) {
+    refSummary.push(`Advisories: ${ctx.references.advisories.map((r) => r.url).join(', ')}`);
+  }
+  if (ctx.references.writeups.length > 0) {
+    refSummary.push(`Writeups: ${ctx.references.writeups.map((r) => r.url).join(', ')}`);
   }
 
-  const specRow = getSpec(jobId);
-  if (!specRow) {
-    throw new Error(`No spec found for job ${jobId}`);
-  }
+  return `Analyze this CVE and produce a detailed technical analysis:
 
-  const existingSpec = typeof specRow.spec_json === 'string'
-    ? JSON.parse(specRow.spec_json)
-    : specRow.spec_json;
+== CVE DATA ==
+CVE ID: ${ctx.cveId}
+Description: ${ctx.description}
+Published: ${ctx.published || 'Unknown'}
 
-  // Load rework-spec prompt
-  const promptPath = resolve(PROMPTS_DIR, 'rework-spec.md');
-  let systemPrompt;
-  try {
-    systemPrompt = readFileSync(promptPath, 'utf-8');
-  } catch {
-    throw new Error('rework-spec.md prompt not found');
-  }
+== SEVERITY ==
+CVSS Score: ${ctx.cvss.score} (${ctx.cvss.severity})
+Attack Vector: ${ctx.cvss.vector}
+Attack Complexity: ${ctx.cvss.complexity}
+Privileges Required: ${ctx.cvss.privilegesRequired || 'Unknown'}
+User Interaction: ${ctx.cvss.userInteraction || 'Unknown'}
 
-  const userPrompt = [
-    `== ORIGINAL SPEC (REJECTED) ==`,
-    JSON.stringify(existingSpec, null, 2),
-    ``,
-    `== REVIEWER FEEDBACK ==`,
-    feedback,
-    ``,
-    `== REVISION NUMBER ==`,
-    `This is revision ${job.spec_revision || 2} of 3. Address ALL feedback points.`,
-  ].join('\n');
+== WEAKNESS ==
+${ctx.cwes.map((c) => `${c.id}: ${c.name} (${c.category})`).join('\n')}
 
-  try {
-    const { result, tokenUsage, durationMs } = await generateJSON({
-      systemPrompt,
-      userPrompt,
-      maxRetries: 2,
-      maxTokens: 8192,
-    });
+== MITRE ATT&CK ==
+Technique: ${ctx.mitre.technique} - ${ctx.mitre.name} (${ctx.mitre.tactic})
 
-    // Update existing spec with revised version
-    updateSpec(jobId, result, tokenUsage, durationMs);
-    // Save version history
-    createSpecVersion({ jobId, revision: job.spec_revision || 2, specJson: result, feedback, tokenUsage });
-    updateJobStatus(jobId, 'pending_spec_review');
+== AFFECTED PRODUCTS ==
+${ctx.affected.map((a) => `${a.vendor}/${a.product} (up to ${a.versionEnd || 'unknown'})`).join('\n')}
 
-    console.log(`[Researcher Worker] ${jobId} spec rework complete (rev ${job.spec_revision}) | ${tokenUsage} tokens`);
-    return { jobId, status: 'pending_spec_review', revision: job.spec_revision };
-  } catch (err) {
-    console.error(`[Researcher Worker] ${jobId} spec rework failed:`, err.message);
-    updateJobStatus(jobId, 'failed', `Spec rework failed: ${err.message}`);
-    throw err;
-  }
+== DETECTED TECH STACK (from NVD/CPE - IMMUTABLE) ==
+${ctx.techStack.join(', ')}
+
+== REFERENCES ==
+${refSummary.join('\n') || 'No categorized references'}
+Public exploit exists: ${ctx.exploitExists ? 'YES' : 'NO'}
+
+== CONTEXT ==
+Detected Category: ${ctx.detectedCategory}
+Suggested Difficulty: ${ctx.suggestedDifficulty}
+
+Produce a thorough technical analysis as JSON.`;
 }
 
 export function getResearcherWorker() {

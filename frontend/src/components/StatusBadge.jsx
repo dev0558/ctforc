@@ -1,9 +1,11 @@
 const STATUS_LABELS = {
   queued: 'Queued',
   researching: 'Researching',
+  architecting: 'Architecting',
   pending_spec_review: 'Spec Review',
   spec_approved: 'Spec Approved',
-  building: 'Building',
+  building: 'Developing',
+  developing: 'Developing',
   pending_build_review: 'Build Review',
   ready: 'Ready',
   failed: 'Failed',

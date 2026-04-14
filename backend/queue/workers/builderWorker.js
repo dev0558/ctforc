@@ -18,7 +18,7 @@ let worker = null;
 
 export function startBuilderWorker() {
   worker = new Worker(
-    'build-queue',
+    'developer-queue',
     async (bullJob) => {
       const { jobId, type, feedback } = bullJob.data;
 
@@ -35,14 +35,14 @@ export function startBuilderWorker() {
   );
 
   worker.on('completed', (bullJob, result) => {
-    console.log(`[Builder Worker] BullMQ job ${bullJob.id} completed: ${result?.filesCount || 0} files`);
+    console.log(`[Developer Agent] BullMQ job ${bullJob.id} completed: ${result?.filesCount || 0} files`);
   });
 
   worker.on('failed', (bullJob, err) => {
-    console.error(`[Builder Worker] BullMQ job ${bullJob?.id} failed:`, err.message);
+    console.error(`[Developer Agent] BullMQ job ${bullJob?.id} failed:`, err.message);
   });
 
-  console.log('[Builder Worker] Started (Phase 3: real Claude API builders + rework support)');
+  console.log('[Developer Agent] Started (stage 3: spec → challenge files)');
   return worker;
 }
 
@@ -50,7 +50,7 @@ export function startBuilderWorker() {
  * Handle normal build jobs.
  */
 async function handleBuild(jobId) {
-  console.log(`[Builder Worker] Processing ${jobId}`);
+  console.log(`[Developer Agent] Processing ${jobId}`);
 
   const job = getJob(jobId);
   if (!job) {
@@ -78,9 +78,9 @@ async function handleBuild(jobId) {
     throw new Error(`Unknown category: ${categoryId}`);
   }
 
-  console.log(`[Builder Worker] Category: ${categoryId} | Challenge: "${approvedSpec.challengeName}"`);
+  console.log(`[Developer Agent] Category: ${categoryId} | Challenge: "${approvedSpec.challengeName}"`);
 
-  updateJobStatus(jobId, 'building');
+  updateJobStatus(jobId, 'developing');
 
   try {
     const result = await buildChallenge(approvedSpec, categoryId);
@@ -95,9 +95,9 @@ async function handleBuild(jobId) {
       const antiAiResult = injectCountermeasures(result.files, honeypotFlag, realFlag);
       finalFiles = antiAiResult.processedFiles;
       antiAiManifest = antiAiResult.manifest;
-      console.log(`[Builder Worker] ${jobId} anti-AI: ${antiAiManifest.totalInjections} injections (honeypot: ${honeypotFlag ? 'enabled' : 'disabled'})`);
+      console.log(`[Developer Agent] ${jobId} anti-AI: ${antiAiManifest.totalInjections} injections (honeypot: ${honeypotFlag ? 'enabled' : 'disabled'})`);
     } catch (err) {
-      console.warn(`[Builder Worker] ${jobId} anti-AI engine failed (non-fatal):`, err.message);
+      console.warn(`[Developer Agent] ${jobId} anti-AI engine failed (non-fatal):`, err.message);
     }
 
     // Save files to storage on disk
@@ -107,9 +107,9 @@ async function handleBuild(jobId) {
     let testResults = null;
     try {
       testResults = await testChallenge(jobId, categoryId, finalFiles, realFlag, config.storagePath);
-      console.log(`[Builder Worker] ${jobId} test: ${testResults.overallPass ? 'PASS' : 'FAIL'} (${testResults.duration}ms)`);
+      console.log(`[Developer Agent] ${jobId} test: ${testResults.overallPass ? 'PASS' : 'FAIL'} (${testResults.duration}ms)`);
     } catch (err) {
-      console.warn(`[Builder Worker] ${jobId} tester failed (non-fatal):`, err.message);
+      console.warn(`[Developer Agent] ${jobId} tester failed (non-fatal):`, err.message);
       testResults = { tested: false, errors: [err.message], overallPass: false };
     }
 
@@ -135,10 +135,10 @@ async function handleBuild(jobId) {
 
     updateJobStatus(jobId, 'pending_build_review');
 
-    console.log(`[Builder Worker] ${jobId} complete: ${fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
+    console.log(`[Developer Agent] ${jobId} complete: ${fileList.length} files | ${result.tokenUsage} tokens | ${result.durationMs}ms`);
     return { jobId, status: 'pending_build_review', filesCount: fileList.length };
   } catch (err) {
-    console.error(`[Builder Worker] ${jobId} build error:`, err.message);
+    console.error(`[Developer Agent] ${jobId} build error:`, err.message);
     updateJobStatus(jobId, 'failed', `Build failed: ${err.message}`);
     throw err;
   }
@@ -148,7 +148,7 @@ async function handleBuild(jobId) {
  * Handle build rework jobs — load rejected build + feedback, call Claude to revise.
  */
 async function handleReworkBuild(jobId, feedback) {
-  console.log(`[Builder Worker] Reworking build for job ${jobId}`);
+  console.log(`[Developer Agent] Reworking build for job ${jobId}`);
 
   const job = getJob(jobId);
   if (!job) {
@@ -211,7 +211,7 @@ async function handleReworkBuild(jobId, feedback) {
     `This is build revision ${job.build_revision || 2} of 3. Fix ALL issues raised in the feedback.`,
   ].join('\n');
 
-  updateJobStatus(jobId, 'building');
+  updateJobStatus(jobId, 'developing');
 
   try {
     const { result, tokenUsage, durationMs } = await generateJSON({
@@ -240,10 +240,10 @@ async function handleReworkBuild(jobId, feedback) {
     createBuildVersion({ jobId, revision: job.build_revision || 2, fileManifest, feedback, tokenUsage });
     updateJobStatus(jobId, 'pending_build_review');
 
-    console.log(`[Builder Worker] ${jobId} build rework complete (rev ${job.build_revision}) | ${fileList.length} files | ${tokenUsage} tokens`);
+    console.log(`[Developer Agent] ${jobId} build rework complete (rev ${job.build_revision}) | ${fileList.length} files | ${tokenUsage} tokens`);
     return { jobId, status: 'pending_build_review', filesCount: fileList.length };
   } catch (err) {
-    console.error(`[Builder Worker] ${jobId} build rework failed:`, err.message);
+    console.error(`[Developer Agent] ${jobId} build rework failed:`, err.message);
     updateJobStatus(jobId, 'failed', `Build rework failed: ${err.message}`);
     throw err;
   }

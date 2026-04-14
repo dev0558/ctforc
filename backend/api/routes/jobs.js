@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getJobs, getJob, getSpec, getChallenge, getReviews, getSpecVersions, getBuildVersions } from '../../db/client.js';
+import { getJobs, getJob, getSpec, getChallenge, getReviews, getAnalysis, getSpecVersions, getBuildVersions } from '../../db/client.js';
 
 const router = Router();
 
@@ -27,11 +27,12 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ error: 'Job not found' });
     }
 
+    const analysis = getAnalysis(job.id);
     const spec = getSpec(job.id);
     const challenge = getChallenge(job.id);
     const reviews = getReviews(job.id);
 
-    res.json({ ...job, spec, challenge, reviews });
+    res.json({ ...job, analysis, spec, challenge, reviews });
   } catch (err) {
     console.error('[Jobs] Error:', err);
     res.status(500).json({ error: 'Internal server error' });

@@ -25,14 +25,15 @@ export async function initDb() {
       category TEXT,
       difficulty TEXT,
       status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN (
-        'queued','researching','pending_spec_review','spec_approved',
-        'building','pending_build_review','ready','failed','rejected',
+        'queued','researching','architecting','pending_spec_review','spec_approved',
+        'developing','pending_build_review','ready','failed','rejected',
         'reworking_spec','reworking_build','rejected_final'
       )),
       error_message TEXT,
       retry_count INTEGER NOT NULL DEFAULT 0,
       spec_revision INTEGER NOT NULL DEFAULT 1,
       build_revision INTEGER NOT NULL DEFAULT 1,
+      immutable_tech TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -43,6 +44,17 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id),
       spec_json TEXT NOT NULL,
+      token_usage INTEGER DEFAULT 0,
+      generation_time_ms INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS analyses (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id),
+      analysis_json TEXT NOT NULL,
       token_usage INTEGER DEFAULT 0,
       generation_time_ms INTEGER DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -230,6 +242,29 @@ export function updateChallenge(jobId, fileManifest, tokenUsage = 0, generationT
     `UPDATE challenges SET file_manifest = ?, token_usage = ?, generation_time_ms = ? WHERE job_id = ?`,
     [jsonStr, tokenUsage, generationTimeMs, jobId]
   );
+}
+
+// --- Analyses ---
+
+export function createAnalysis({ jobId, analysisJson, tokenUsage = 0, generationTimeMs = 0 }) {
+  const id = uuidv4();
+  const jsonStr = typeof analysisJson === 'string' ? analysisJson : JSON.stringify(analysisJson);
+  getDb().run(
+    'INSERT INTO analyses (id, job_id, analysis_json, token_usage, generation_time_ms) VALUES (?, ?, ?, ?, ?)',
+    [id, jobId, jsonStr, tokenUsage, generationTimeMs]
+  );
+  return { id, job_id: jobId };
+}
+
+export function getAnalysis(jobId) {
+  const stmt = getDb().prepare('SELECT * FROM analyses WHERE job_id = ?');
+  stmt.bind([jobId]);
+  const row = stmt.step() ? stmt.getAsObject() : null;
+  stmt.free();
+  if (row && row.analysis_json) {
+    try { row.analysis_json = JSON.parse(row.analysis_json); } catch {}
+  }
+  return row;
 }
 
 // --- Specs ---

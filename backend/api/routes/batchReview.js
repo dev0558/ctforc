@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getJob, updateJobStatus, updateJob, createReview } from '../../db/client.js';
-import { addBuildJob, addReworkSpecJob, addReworkBuildJob } from '../../queue/index.js';
+import { addDeveloperJob, addReworkSpecJob, addReworkBuildJob } from '../../queue/index.js';
 
 const router = Router();
 
@@ -42,7 +42,7 @@ router.post('/', async (req, res) => {
       if (action === 'approve') {
         if (stage === 'spec') {
           updateJobStatus(jobId, 'spec_approved');
-          try { await addBuildJob(jobId); } catch {}
+          try { await addDeveloperJob(jobId); } catch {}
           results.push({ jobId, success: true, status: 'spec_approved' });
         } else {
           updateJobStatus(jobId, 'ready');

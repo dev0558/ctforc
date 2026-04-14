@@ -9,6 +9,7 @@
     "seed": "node db/seed.js"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.107",
     "@anthropic-ai/sdk": "^0.39.0",
     "archiver": "^7.0.1",
     "bullmq": "^5.34.8",

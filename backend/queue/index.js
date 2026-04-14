@@ -4,7 +4,8 @@ import config from '../config.js';
 
 let connection = null;
 let researchQueue = null;
-let buildQueue = null;
+let architectQueue = null;
+let developerQueue = null;
 
 export function getConnection() {
   if (!connection) {
@@ -30,11 +31,23 @@ export function getResearchQueue() {
   return researchQueue;
 }
 
-export function getBuildQueue() {
-  if (!buildQueue) {
-    buildQueue = new Queue('build-queue', { connection: getConnection() });
+export function getArchitectQueue() {
+  if (!architectQueue) {
+    architectQueue = new Queue('architect-queue', { connection: getConnection() });
   }
-  return buildQueue;
+  return architectQueue;
+}
+
+export function getDeveloperQueue() {
+  if (!developerQueue) {
+    developerQueue = new Queue('developer-queue', { connection: getConnection() });
+  }
+  return developerQueue;
+}
+
+// Backwards compat alias
+export function getBuildQueue() {
+  return getDeveloperQueue();
 }
 
 export async function addResearchJob(jobId) {
@@ -42,17 +55,27 @@ export async function addResearchJob(jobId) {
   await queue.add('research', { jobId }, { jobId });
 }
 
+export async function addArchitectJob(jobId) {
+  const queue = getArchitectQueue();
+  await queue.add('architect', { jobId }, { jobId: `architect-${jobId}-${Date.now()}` });
+}
+
+export async function addDeveloperJob(jobId) {
+  const queue = getDeveloperQueue();
+  await queue.add('develop', { jobId }, { jobId: `develop-${jobId}-${Date.now()}` });
+}
+
+// Backwards compat alias
 export async function addBuildJob(jobId) {
-  const queue = getBuildQueue();
-  await queue.add('build', { jobId }, { jobId: `build-${jobId}-${Date.now()}` });
+  return addDeveloperJob(jobId);
 }
 
 export async function addReworkSpecJob(jobId, feedback) {
-  const queue = getResearchQueue();
+  const queue = getArchitectQueue();
   await queue.add('rework-spec', { jobId, feedback, type: 'rework-spec' }, { jobId: `rework-spec-${jobId}-${Date.now()}` });
 }
 
 export async function addReworkBuildJob(jobId, feedback) {
-  const queue = getBuildQueue();
+  const queue = getDeveloperQueue();
   await queue.add('rework-build', { jobId, feedback, type: 'rework-build' }, { jobId: `rework-build-${jobId}-${Date.now()}` });
 }
